@@ -9,3 +9,8 @@ __tests__
 
 /babel.config.js
 /example/
+
+.env
+
+.npmrc
+.gitignore

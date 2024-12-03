@@ -1,6 +1,6 @@
 {
   "name": "@superfan-app/spotify-oauth",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Spotify OAuth module for Expo",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -25,7 +25,8 @@
     "url": "https://github.com/Superfan-App/spotify-oauth"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
+    "registry": "https://npm.pkg.github.com/",
+    "access": "public"
   },
   "bugs": {
     "url": "https://github.com/Superfan-App/spotify-oauth/issues"
