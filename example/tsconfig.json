@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "spotify-oauth": ["../src/index"],
+      "spotify-oauth/*": ["../src/*"]
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "@superfan/spotify-oauth",
+  "version": "0.1.0",
+  "description": "Spotify OAuth module for Expo",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "expo-module build",
+    "clean": "expo-module clean",
+    "lint": "expo-module lint",
+    "test": "expo-module test",
+    "prepare": "expo-module prepare",
+    "prepublishOnly": "expo-module prepublishOnly",
+    "expo-module": "expo-module",
+    "open:ios": "xed example/ios"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "spotify-oauth",
+    "SpotifyOAuth"
+  ],
+  "repository": "https://github.com/william-matz/spotify-oauth",
+  "bugs": {
+    "url": "https://github.com/william-matz/spotify-oauth/issues"
+  },
+  "author": "superfan <39891237+william-matz@users.noreply.github.com> (https://github.com/william-matz)",
+  "license": "MIT",
+  "homepage": "https://github.com/william-matz/spotify-oauth#readme",
+  "dependencies": {
+    "@expo/config-plugins": "^9.0.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "~18.3.12",
+    "@types/react-native": "^0.73.0",
+    "expo": "~52.0.0",
+    "expo-module-scripts": "^4.0.2",
+    "expo-modules-core": "^2.1.1",
+    "react": "^18.3.1",
+    "react-native": "0.76.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}
