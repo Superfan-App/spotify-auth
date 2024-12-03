@@ -11,6 +11,7 @@
     "test": "expo-module test",
     "prepare": "expo-module prepare",
     "prepublishOnly": "expo-module prepublishOnly",
+    "publish:npm": "npm publish --access public",
     "expo-module": "expo-module",
     "open:ios": "xed example/ios"
   },
@@ -25,7 +26,6 @@
     "url": "https://github.com/Superfan-App/spotify-oauth"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com/",
     "access": "public"
   },
   "bugs": {
