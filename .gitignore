@@ -56,7 +56,4 @@ yarn-error.log
 # Expo
 .expo/*
 
-.npmrc
-
 .env
-.npmrc
