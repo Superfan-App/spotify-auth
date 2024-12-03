@@ -1,5 +1,5 @@
 {
-  "name": "@superfan/spotify-oauth",
+  "name": "@superfan-app/spotify-oauth",
   "version": "0.1.0",
   "description": "Spotify OAuth module for Expo",
   "main": "build/index.js",
@@ -20,13 +20,19 @@
     "spotify-oauth",
     "SpotifyOAuth"
   ],
-  "repository": "https://github.com/william-matz/spotify-oauth",
-  "bugs": {
-    "url": "https://github.com/william-matz/spotify-oauth/issues"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Superfan-App/spotify-oauth"
   },
-  "author": "superfan <39891237+william-matz@users.noreply.github.com> (https://github.com/william-matz)",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
+  "bugs": {
+    "url": "https://github.com/Superfan-App/spotify-oauth/issues"
+  },
+  "author": "Superfan <support@superfan.app>",
   "license": "MIT",
-  "homepage": "https://github.com/william-matz/spotify-oauth#readme",
+  "homepage": "https://github.com/Superfan-App/spotify-oauth#readme",
   "dependencies": {
     "@expo/config-plugins": "^9.0.11"
   },
