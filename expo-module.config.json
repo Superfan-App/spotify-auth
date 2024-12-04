@@ -1,6 +1,13 @@
 {
-  "platforms": ["apple"],
-  "apple": {
-    "modules": ["SpotifyOAuthModule"]
+  "platforms": [
+    "ios"
+  ],
+  "ios": {
+    "modules": [
+      "SpotifyAuthModule"
+    ],
+    "appDelegateSubscribers": [
+      "SpotifyAuthDelegate"
+    ]
   }
 }
