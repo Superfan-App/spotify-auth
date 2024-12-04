@@ -1,8 +1,6 @@
-import { NativeModule, requireNativeModule } from "expo";
+import { requireNativeModule } from "expo-modules-core";
 
-import { SpotifyOAuthModuleEvents } from "./SpotifyOAuth.types";
-
-declare class SpotifyOAuthModule extends NativeModule<SpotifyOAuthModuleEvents> {
+interface SpotifyOAuthModule {
   PI: number;
   hello(): string;
 }
