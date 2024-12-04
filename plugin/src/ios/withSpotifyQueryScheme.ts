@@ -1,10 +1,10 @@
 import { ConfigPlugin, withInfoPlist } from "expo/config-plugins";
 
-import { ISpotifyConfig } from "../types";
+import { SpotifyConfig } from "../types";
 
 const spotifyScheme = "spotify";
 
-export const withSpotifyQueryScheme: ConfigPlugin<ISpotifyConfig> = (config) =>
+export const withSpotifyQueryScheme: ConfigPlugin<SpotifyConfig> = (config) =>
   withInfoPlist(config, (config) => {
     if (!config.modResults.LSApplicationQueriesSchemes) {
       config.modResults.LSApplicationQueriesSchemes = [];

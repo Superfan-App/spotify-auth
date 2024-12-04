@@ -1,8 +1,8 @@
-import { ConfigPlugin, withInfoPlist } from "expo/config-plugins";
+import { type ConfigPlugin, withInfoPlist } from "expo/config-plugins";
 
-import { ISpotifyConfig } from "../types";
+import { SpotifyConfig } from "../types";
 
-export const withSpotifyURLScheme: ConfigPlugin<ISpotifyConfig> = (
+export const withSpotifyURLScheme: ConfigPlugin<SpotifyConfig> = (
   config,
   { scheme }
 ) => {

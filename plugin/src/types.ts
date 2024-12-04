@@ -18,7 +18,7 @@ export type SpotifyScopes =
   | 'user-read-recently-played'
   | 'user-top-read'
 
-export interface ISpotifyConfig {
+export interface SpotifyConfig {
   clientID: string
   tokenRefreshURL: string
   tokenSwapURL: string

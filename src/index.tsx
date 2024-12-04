@@ -53,7 +53,9 @@ export function SpotifyAuthProvider({
   }, []);
 
   return (
-    <SpotifyAuthContextInstance.Provider value={{ accessToken: token, authorize }}>
+    <SpotifyAuthContextInstance.Provider
+      value={{ accessToken: token, authorize }}
+    >
       {children}
     </SpotifyAuthContextInstance.Provider>
   );

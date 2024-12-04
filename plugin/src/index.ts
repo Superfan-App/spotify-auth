@@ -1,12 +1,14 @@
-import { ConfigPlugin } from '@expo/config-plugins'
+import { type ConfigPlugin, createRunOncePlugin } from '@expo/config-plugins'
 
 import { withSpotifyQueryScheme } from './ios/withSpotifyQueryScheme'
 import { withSpotifyURLScheme } from './ios/withSpotifyURLScheme'
-import { ISpotifyConfig } from './types'
-import { withSpotifyConfig } from './withSpotifyConfig'
+import { SpotifyConfig } from './types'
+import { withSpotifyOAuthConfig } from './withSpotifyConfig'
 
-const withSpotifyRemote: ConfigPlugin<ISpotifyConfig> = (config, props) => {
-  config = withSpotifyConfig(config, props)
+import pkg from '../../package.json'
+
+const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
+  config = withSpotifyOAuthConfig(config, props)
 
   // iOS specific
   config = withSpotifyQueryScheme(config, props)
@@ -15,4 +17,4 @@ const withSpotifyRemote: ConfigPlugin<ISpotifyConfig> = (config, props) => {
   return config
 }
 
-export default withSpotifyRemote
+export default createRunOncePlugin(withSpotifyAuth, pkg.name, pkg.version);
