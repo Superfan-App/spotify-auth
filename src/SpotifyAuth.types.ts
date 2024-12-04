@@ -1,3 +1,5 @@
+import { createContext } from "react";
+
 /**
  * Data returned from the Spotify authorization process
  */
@@ -21,9 +23,14 @@ export interface SpotifyAuthViewProps {
 /**
  * Context for Spotify authentication state and actions
  */
-export interface SpotifyContext {
+export interface SpotifyAuthContext {
   /** The current Spotify access token, null if not authenticated */
   accessToken: string | null;
   /** Function to initiate Spotify authorization */
   authorize: (playURI?: string) => void;
 }
+
+export const SpotifyAuthContextInstance = createContext<SpotifyAuthContext>({
+  accessToken: null,
+  authorize: () => {},
+});

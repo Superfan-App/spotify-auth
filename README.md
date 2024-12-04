@@ -1,32 +1,68 @@
-# spotify-oauth
+# spotify-auth
 
-Spotify OAuth module for Expo
+A React Native module for Spotify authentication, built with Expo modules.
 
-# API documentation
+# Installation
 
-- [Documentation for the latest stable release](https://docs.expo.dev/versions/latest/sdk/spotify-oauth/)
-- [Documentation for the main branch](https://docs.expo.dev/versions/unversioned/sdk/spotify-oauth/)
-
-# Installation in managed Expo projects
-
-For [managed](https://docs.expo.dev/archive/managed-vs-bare/) Expo projects, please follow the installation instructions in the [API documentation for the latest stable release](#api-documentation). If you follow the link and there is no documentation available then this library is not yet usable within managed projects &mdash; it is likely to be included in an upcoming Expo SDK release.
-
-# Installation in bare React Native projects
-
-For bare React Native projects, you must ensure that you have [installed and configured the `expo` package](https://docs.expo.dev/bare/installing-expo-modules/) before continuing.
-
-### Add the package to your npm dependencies
-
-```
-npm install @superfan-app/spotify-oauth
+```bash
+npm install @superfan-app/spotify-auth
 ```
 
+# Configuration
 
+### iOS
 
-### Configure for iOS
+1. Run `npx pod-install` after installing the npm package.
 
-Run `npx pod-install` after installing the npm package.
+2. Add the following to your `Info.plist`:
 
-# Contributing
+```xml
+<key>SpotifyClientID</key>
+<string>YOUR_CLIENT_ID</string>
+<key>SpotifyScheme</key>
+<string>YOUR_URL_SCHEME</string>
+<key>SpotifyCallback</key>
+<string>YOUR_CALLBACK_PATH</string>
+<key>SpotifyScopes</key>
+<array>
+    <string>user-read-private</string>
+    <!-- Add other required scopes -->
+</array>
+```
 
-Contributions are very welcome! Please refer to guidelines described in the [contributing guide]( https://github.com/expo/expo#contributing).
+# Usage
+
+```tsx
+import { SpotifyAuthProvider, useSpotifyAuth } from '@superfan-app/spotify-auth';
+
+// Wrap your app with the provider
+function App() {
+  return (
+    <SpotifyAuthProvider>
+      <YourApp />
+    </SpotifyAuthProvider>
+  );
+}
+
+// Use the hook in your components
+function YourApp() {
+  const { accessToken, authorize } = useSpotifyAuth();
+
+  const handleLogin = () => {
+    // Optional playURI to start playing after auth
+    authorize();
+  };
+
+  if (!accessToken) {
+    return <Button onPress={handleLogin} title="Login with Spotify" />;
+  }
+
+  return <YourAuthenticatedApp />;
+}
+```
+
+The module provides:
+- `SpotifyAuthProvider`: Context provider that manages the Spotify authentication state
+- `useSpotifyAuth`: Hook that provides:
+  - `accessToken`: Current Spotify access token (null if not authenticated)
+  - `authorize(playURI?: string)`: Function to initiate Spotify authorization

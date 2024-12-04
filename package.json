@@ -1,5 +1,5 @@
 {
-  "name": "@superfan-app/spotify-oauth",
+  "name": "@superfan-app/spotify-auth",
   "version": "0.1.12",
   "description": "Spotify OAuth module for Expo",
   "main": "build/index.js",
@@ -25,22 +25,22 @@
   "keywords": [
     "react-native",
     "expo",
-    "spotify-oauth",
-    "SpotifyOAuth"
+    "spotify-auth",
+    "SpotifyAuth"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Superfan-App/spotify-oauth"
+    "url": "https://github.com/Superfan-App/spotify-auth"
   },
   "publishConfig": {
     "access": "public"
   },
   "bugs": {
-    "url": "https://github.com/Superfan-App/spotify-oauth/issues"
+    "url": "https://github.com/Superfan-App/spotify-auth/issues"
   },
   "author": "Superfan <support@superfan.app>",
   "license": "MIT",
-  "homepage": "https://github.com/Superfan-App/spotify-oauth#readme",
+  "homepage": "https://github.com/Superfan-App/spotify-auth#readme",
   "dependencies": {
     "@expo/config-plugins": "^9.0.11"
   },
