@@ -28,10 +28,23 @@ jobs:
         run: npm run build
 
       - name: Increment version
+        id: version
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          npm version patch -m "Bump version to %s [skip ci]"
+          
+          # Get the new version number
+          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+          # Stage the package.json changes
+          git add package.json
+          
+          # Commit and tag
+          git commit -m "Bump version to $NEW_VERSION [skip ci]"
+          git tag $NEW_VERSION
+          
+          # Push changes and tag
           git push
           git push --tags
 
