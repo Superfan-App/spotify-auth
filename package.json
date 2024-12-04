@@ -4,6 +4,10 @@
   "description": "Spotify OAuth module for Expo",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "files": [
+    "build",
+    "app.plugin.js"
+  ],
   "scripts": {
     "build": "expo-module build",
     "clean": "expo-module clean",
@@ -52,6 +56,5 @@
     "expo": "*",
     "react": "*",
     "react-native": "*"
-  },
-  "app.plugin.js": "app.plugin.js"
+  }
 }
