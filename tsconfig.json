@@ -4,6 +4,6 @@
     "outDir": "./build",
     "resolveJsonModule": true
   },
-  "include": ["./src"],
+  "include": ["./src", "./plugin"],
   "exclude": ["**/__mocks__/*", "**/__tests__/*"]
 }
