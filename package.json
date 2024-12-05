@@ -42,7 +42,8 @@
   "license": "MIT",
   "homepage": "https://github.com/Superfan-App/spotify-auth#readme",
   "devDependencies": {
-    "expo-module-scripts": "^4.0.2"
+    "expo-module-scripts": "^4.0.2",
+    "expo-modules-core": "^2.1.1"
   },
   "peerDependencies": {
     "expo": "*",
