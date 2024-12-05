@@ -30,15 +30,6 @@ jobs:
       - name: Build plugin
         run: npm run build plugin
 
-      - name: Debug package contents
-        run: |
-          echo "Directory contents before publish:"
-          ls -la
-          echo "\niOS directory contents:"
-          ls -la ios/
-          echo "\nDry run of npm pack:"
-          npm pack --dry-run
-
       - name: Increment version
         id: version
         run: |
@@ -61,6 +52,10 @@ jobs:
           git push --tags
 
       - name: Publish package
-        run: npm publish --access public
+        run: |
+          npm publish --access public
+          # List contents of the published package
+          echo "Published package contents:"
+          tar -tvf $(npm pack)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
