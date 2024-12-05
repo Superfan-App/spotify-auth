@@ -22,8 +22,7 @@
     "prepublishOnly": "expo-module prepublishOnly",
     "publish:npm": "npm publish --access public",
     "expo-module": "expo-module",
-    "open:ios": "xed example/ios",
-    "postpack": "tar -tvf *.tgz"
+    "open:ios": "xed example/ios"
   },
   "keywords": [
     "react-native",

@@ -49,10 +49,7 @@ jobs:
           git push --tags
 
       - name: Publish package
-        run: |
-          npm publish --access public
-          # List contents of the published package
-          echo "Published package contents:"
-          tar -tvf $(npm pack)
+        run: npm publish --access public
+
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
