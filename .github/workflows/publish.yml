@@ -30,6 +30,15 @@ jobs:
       - name: Build plugin
         run: npm run build plugin
 
+      - name: Debug package contents
+        run: |
+          echo "Directory contents before publish:"
+          ls -la
+          echo "\niOS directory contents:"
+          ls -la ios/
+          echo "\nDry run of npm pack:"
+          npm pack --dry-run
+
       - name: Increment version
         id: version
         run: |
