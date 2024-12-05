@@ -5,7 +5,11 @@ import { withSpotifyURLScheme } from './ios/withSpotifyURLScheme'
 import { SpotifyConfig } from './types'
 import { withSpotifyOAuthConfig } from './withSpotifyConfig'
 
-import pkg from '../../package.json'
+const pkg: {
+  name: string;
+  version: string;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+} = require('../../package.json');
 
 const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
   config = withSpotifyOAuthConfig(config, props)

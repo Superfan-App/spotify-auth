@@ -27,6 +27,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Build plugin
+        run: npm run build plugin
+
       - name: Increment version
         id: version
         run: |
