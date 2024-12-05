@@ -2,7 +2,7 @@ import ExpoModulesCore
 import SpotifyiOS
 
 public class SpotifyAuthDelegate: ExpoAppDelegateSubscriber, SPTSessionManagerDelegate {
-    let spotifyAuth = SpotifyAuth.shared
+    let spotifyAuth = SpotifyAuthAuth.shared
 
     public func sessionManager(manager: SPTSessionManager, didInitiate session: SPTSession) {
         spotifyAuth.sessionManager(manager: manager, didInitiate: session)

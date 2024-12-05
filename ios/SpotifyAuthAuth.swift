@@ -1,10 +1,10 @@
 import ExpoModulesCore
 import SpotifyiOS
 
-final class SpotifyAuth: NSObject, SPTSessionManagerDelegate {
+final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     weak var module: SpotifyAuthModule?
 
-    static let shared = SpotifyAuth()
+    static let shared = SpotifyAuthAuth()
 
     private let clientID: String = Bundle.main.object(forInfoDictionaryKey: "SpotifyClientID") as? String ?? ""
 

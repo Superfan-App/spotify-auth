@@ -4,7 +4,7 @@ import SpotifyiOS
 let SPOTIFY_AUTHORIZATION_EVENT_NAME = "onSpotifyAuth"
 
 public class SpotifyAuthModule: Module {
-    let spotifyAuth = SpotifyAuth.shared
+    let spotifyAuth = SpotifyAuthAuth.shared
 
     // Each module class must implement the definition function. The definition consists of components
     // that describes the module's functionality and behavior.
@@ -13,7 +13,7 @@ public class SpotifyAuthModule: Module {
         Name("SpotifyAuth")
 
         OnCreate {
-            SpotifyAuth.shared.module = self
+            SpotifyAuthAuth.shared.module = self
         }
 
         Constants([
