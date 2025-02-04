@@ -3,6 +3,33 @@ import SpotifyiOS
 
 let SPOTIFY_AUTHORIZATION_EVENT_NAME = "onSpotifyAuth"
 
+#if DEBUG
+func secureLog(_ message: String, sensitive: Bool = false) {
+    if sensitive {
+        print("[SpotifyAuth] ********")
+    } else {
+        print("[SpotifyAuth] \(message)")
+    }
+}
+#else
+func secureLog(_ message: String, sensitive: Bool = false) {
+    if !sensitive {
+        print("[SpotifyAuth] \(message)")
+    }
+}
+#endif
+
+struct AuthorizeConfig: Record {
+    @Field
+    var clientId: String
+    
+    @Field
+    var redirectUrl: String
+    
+    @Field
+    var showDialog: Bool = false
+}
+
 public class SpotifyAuthModule: Module {
     let spotifyAuth = SpotifyAuthAuth.shared
 
@@ -14,6 +41,7 @@ public class SpotifyAuthModule: Module {
 
         OnCreate {
             SpotifyAuthAuth.shared.module = self
+            secureLog("Module initialized")
         }
 
         Constants([
@@ -25,32 +53,35 @@ public class SpotifyAuthModule: Module {
 
         // This will be called when JS starts observing the event.
         OnStartObserving {
-            print("OnStartObserving")
-            // Add any observers or listeners, if required.
-            // In this case, you might not need anything here.
+            secureLog("Started observing events")
         }
 
         // This will be called when JS stops observing the event.
         OnStopObserving {
-            print("OnStopObserving")
-            // Remove any observers or listeners.
+            secureLog("Stopped observing events")
         }
 
-        @objc(authorize:resolver:rejecter:)
-        func authorize(_ config: NSDictionary,
-                      resolver resolve: @escaping RCTPromiseResolveBlock,
-                      rejecter reject: @escaping RCTPromiseRejectBlock) -> Void {
-            guard let clientId = config["clientId"] as? String,
-                  let redirectUrl = config["redirectUrl"] as? String else {
-                reject("invalid_config", "Missing clientId or redirectUrl", nil)
+        AsyncFunction("authorize") { (config: AuthorizeConfig, promise: Promise) in
+            secureLog("Authorization requested")
+            
+            // Sanitize and validate redirect URL
+            guard let url = URL(string: config.redirectUrl),
+                  url.scheme != nil,
+                  url.host != nil else {
+                promise.reject(SpotifyAuthError.invalidConfiguration("Invalid redirect URL format"))
                 return
             }
             
-            let showDialog = config["showDialog"] as? Bool ?? false
+            let configuration = SPTConfiguration(clientID: config.clientId, redirectURL: url)
             
-            let configuration = SPTConfiguration(clientID: clientId, redirectURL: URL(string: redirectUrl)!)
-            
-            spotifyAuth.initAuth(configuration)
+            do {
+                try spotifyAuth.initAuth(showDialog: config.showDialog)
+                promise.resolve()
+            } catch {
+                // Sanitize error message
+                let sanitizedError = sanitizeErrorMessage(error.localizedDescription)
+                promise.reject(SpotifyAuthError.authenticationFailed(sanitizedError))
+            }
         }
 
         // Enables the module to be used as a native view. Definition components that are accepted as part of the
@@ -58,23 +89,66 @@ public class SpotifyAuthModule: Module {
         View(SpotifyAuthView.self) {
             // Defines a setter for the `name` prop.
             Prop("name") { (_: SpotifyAuthView, prop: String) in
-                print(prop)
+                secureLog("View prop updated: \(prop)")
             }
         }
     }
 
+    private func sanitizeErrorMessage(_ message: String) -> String {
+        // Remove any potential sensitive data from error messages
+        let sensitivePatterns = [
+            "(?i)client[_-]?id",
+            "(?i)token",
+            "(?i)secret",
+            "(?i)key",
+            "(?i)auth",
+            "(?i)password"
+        ]
+        
+        var sanitized = message
+        for pattern in sensitivePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                sanitized = regex.stringByReplacingMatches(
+                    in: sanitized,
+                    range: NSRange(sanitized.startIndex..., in: sanitized),
+                    withTemplate: "[REDACTED]"
+                )
+            }
+        }
+        return sanitized
+    }
+
     @objc
     public func onAccessTokenObtained(_ token: String) {
-        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, ["success": true, "token": token])
+        secureLog("Access token obtained", sensitive: true)
+        let eventData: [String: Any] = [
+            "success": true,
+            "token": token,
+            "error": nil
+        ]
+        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
     }
 
     @objc
     public func onSignOut() {
-        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, ["success": true, "token": nil])
+        secureLog("User signed out")
+        let eventData: [String: Any] = [
+            "success": true,
+            "token": nil,
+            "error": nil
+        ]
+        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
     }
 
     @objc
     public func onAuthorizationError(_ errorDescription: String) {
-        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, ["success": false, "error": errorDescription, "token": nil])
+        let sanitizedError = sanitizeErrorMessage(errorDescription)
+        secureLog("Authorization error: \(sanitizedError)")
+        let eventData: [String: Any] = [
+            "success": false,
+            "token": nil,
+            "error": sanitizedError
+        ]
+        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
     }
 }

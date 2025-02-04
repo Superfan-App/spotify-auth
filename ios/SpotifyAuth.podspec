@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.license        = package['license']
   s.author         = package['author']
   s.homepage       = package['homepage']
-  s.platforms      = :ios, '15.1'
+  s.platforms      = { :ios => '13.0' }  # Updated minimum iOS version
   s.swift_version  = '5.4'
   s.source         = { git: 'https://github.com/william-matz/spotify-auth' }
   s.static_framework = true
@@ -20,13 +20,30 @@ Pod::Spec.new do |s|
   # Swift/Objective-C compatibility
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'SWIFT_COMPILATION_MODE' => 'wholemodule'
+    'SWIFT_COMPILATION_MODE' => 'wholemodule',
+    'FRAMEWORK_SEARCH_PATHS' => '"$(PODS_ROOT)/../../node_modules/@superfan-app/spotify-auth/ios/Frameworks"',
+    'HEADER_SEARCH_PATHS' => '"$(PODS_ROOT)/../../node_modules/@superfan-app/spotify-auth/ios/Frameworks/SpotifyiOS.xcframework/ios-arm64/SpotifyiOS.framework/Headers"',
+    'ENABLE_BITCODE' => 'NO',
+    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0',
+    'SWIFT_VERSION' => '5.4'
+  }
+
+  s.user_target_xcconfig = {
+    'ENABLE_BITCODE' => 'NO',
+    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
   }
 
   s.source_files = "**/*.{h,m,swift}"
-  s.exclude_files = ["Frameworks/SpotifyiOS.xcframework/**/*.h"]
   s.vendored_frameworks = 'Frameworks/SpotifyiOS.xcframework'
   s.preserve_paths = [
     'Frameworks/*.xcframework',
   ]
+
+  # Post install hooks
+  def s.post_install(target)
+    target.build_configurations.each do |config|
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+    end
+  end
 end

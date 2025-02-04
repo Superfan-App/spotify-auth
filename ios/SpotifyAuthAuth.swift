@@ -1,65 +1,337 @@
 import ExpoModulesCore
 import SpotifyiOS
+import KeychainAccess
+
+enum SpotifyAuthError: Error {
+    case missingConfiguration(String)
+    case invalidConfiguration(String)
+    case authenticationFailed(String)
+    case tokenError(String)
+    case sessionError(String)
+    case networkError(String)
+    case recoverable(String, RetryStrategy)
+    
+    enum RetryStrategy {
+        case none
+        case retry(attempts: Int, delay: TimeInterval)
+        case exponentialBackoff(maxAttempts: Int, initialDelay: TimeInterval)
+    }
+    
+    var isRecoverable: Bool {
+        switch self {
+        case .recoverable:
+            return true
+        case .networkError:
+            return true
+        case .tokenError:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    var localizedDescription: String {
+        switch self {
+        case .missingConfiguration(let field):
+            return "Missing configuration: \(field). Please check your app.json configuration."
+        case .invalidConfiguration(let reason):
+            return "Invalid configuration: \(reason). Please verify your settings."
+        case .authenticationFailed(let reason):
+            return "Authentication failed: \(reason). Please try again."
+        case .tokenError(let reason):
+            return "Token error: \(reason). Please try logging in again."
+        case .sessionError(let reason):
+            return "Session error: \(reason). Please restart the authentication process."
+        case .networkError(let reason):
+            return "Network error: \(reason). Please check your internet connection."
+        case .recoverable(let message, _):
+            return message
+        }
+    }
+    
+    var retryStrategy: RetryStrategy {
+        switch self {
+        case .recoverable(_, let strategy):
+            return strategy
+        case .networkError:
+            return .exponentialBackoff(maxAttempts: 3, initialDelay: 1.0)
+        case .tokenError:
+            return .retry(attempts: 3, delay: 5.0)
+        default:
+            return .none
+        }
+    }
+}
 
 final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     weak var module: SpotifyAuthModule?
 
     static let shared = SpotifyAuthAuth()
 
-    private let clientID: String = Bundle.main.object(forInfoDictionaryKey: "SpotifyClientID") as? String ?? ""
+    private var clientID: String {
+        get throws {
+            guard let value = Bundle.main.object(forInfoDictionaryKey: "SpotifyClientID") as? String,
+                  !value.isEmpty else {
+                throw SpotifyAuthError.missingConfiguration("clientID")
+            }
+            return value
+        }
+    }
 
-    private let scheme: String = Bundle.main.object(forInfoDictionaryKey: "SpotifyScheme") as? String ?? ""
+    private var scheme: String {
+        get throws {
+            guard let value = Bundle.main.object(forInfoDictionaryKey: "SpotifyScheme") as? String,
+                  !value.isEmpty else {
+                throw SpotifyAuthError.missingConfiguration("scheme")
+            }
+            return value
+        }
+    }
 
-    private let callback: String = Bundle.main.object(forInfoDictionaryKey: "SpotifyCallback") as? String ?? ""
+    private var callback: String {
+        get throws {
+            guard let value = Bundle.main.object(forInfoDictionaryKey: "SpotifyCallback") as? String,
+                  !value.isEmpty else {
+                throw SpotifyAuthError.missingConfiguration("callback")
+            }
+            return value
+        }
+    }
 
-    private let tokenRefreshURL: String = Bundle.main.object(forInfoDictionaryKey: "tokenRefreshURL") as? String ?? ""
+    private var tokenRefreshURL: String {
+        get throws {
+            guard let value = Bundle.main.object(forInfoDictionaryKey: "tokenRefreshURL") as? String,
+                  !value.isEmpty else {
+                throw SpotifyAuthError.missingConfiguration("tokenRefreshURL")
+            }
+            return value
+        }
+    }
 
-    private let tokenSwapURL: String = Bundle.main.object(forInfoDictionaryKey: "tokenSwapURL") as? String ?? ""
+    private var tokenSwapURL: String {
+        get throws {
+            guard let value = Bundle.main.object(forInfoDictionaryKey: "tokenSwapURL") as? String,
+                  !value.isEmpty else {
+                throw SpotifyAuthError.missingConfiguration("tokenSwapURL")
+            }
+            return value
+        }
+    }
 
-    private lazy var requestedScopes: SPTScope = {
-        let scopeStrings = Bundle.main.object(forInfoDictionaryKey: "SpotifyScopes") as? [String] ?? []
-        var combinedScope: SPTScope = []
-        for scopeString in scopeStrings {
-            if let scope = stringToScope(scopeString: scopeString) {
-                combinedScope.insert(scope)
+    private var requestedScopes: SPTScope {
+        get throws {
+            guard let scopeStrings = Bundle.main.object(forInfoDictionaryKey: "SpotifyScopes") as? [String],
+                  !scopeStrings.isEmpty else {
+                throw SpotifyAuthError.missingConfiguration("scopes")
+            }
+            
+            var combinedScope: SPTScope = []
+            for scopeString in scopeStrings {
+                if let scope = stringToScope(scopeString: scopeString) {
+                    combinedScope.insert(scope)
+                }
+            }
+            
+            if combinedScope.isEmpty {
+                throw SpotifyAuthError.invalidConfiguration("No valid scopes provided")
+            }
+            
+            return combinedScope
+        }
+    }
+
+    private func validateAndConfigureURLs(_ config: SPTConfiguration) throws {
+        // Validate token swap URL
+        guard let tokenSwapURL = URL(string: try self.tokenSwapURL),
+              tokenSwapURL.scheme?.lowercased() == "https" else {
+            throw SpotifyAuthError.invalidConfiguration("Token swap URL must use HTTPS")
+        }
+        
+        // Validate token refresh URL
+        guard let tokenRefreshURL = URL(string: try self.tokenRefreshURL),
+              tokenRefreshURL.scheme?.lowercased() == "https" else {
+            throw SpotifyAuthError.invalidConfiguration("Token refresh URL must use HTTPS")
+        }
+        
+        config.tokenSwapURL = tokenSwapURL
+        config.tokenRefreshURL = tokenRefreshURL
+        
+        // Configure session for secure communication
+        let session = URLSession(configuration: .ephemeral)
+        session.configuration.tlsMinimumSupportedProtocolVersion = .TLSv12
+        session.configuration.httpAdditionalHeaders = [
+            "X-Client-ID": try self.clientID // Add secure client identification
+        ]
+    }
+
+    lazy var configuration: SPTConfiguration? = {
+        do {
+            let clientID = try self.clientID
+            let scheme = try self.scheme
+            let callback = try self.callback
+            
+            guard let redirectUrl = URL(string: "\(scheme)://\(callback)") else {
+                throw SpotifyAuthError.invalidConfiguration("Invalid redirect URL formation")
+            }
+            
+            let config = SPTConfiguration(clientID: clientID, redirectURL: redirectUrl)
+            try validateAndConfigureURLs(config)
+            
+            return config
+        } catch {
+            module?.onAuthorizationError(error.localizedDescription)
+            return nil
+        }
+    }()
+
+    lazy var sessionManager: SPTSessionManager? = {
+        guard let configuration = self.configuration else {
+            module?.onAuthorizationError("Failed to create configuration")
+            return nil
+        }
+        return SPTSessionManager(configuration: configuration, delegate: self)
+    }()
+
+    private var currentSession: SPTSession? {
+        didSet {
+            cleanupPreviousSession()
+            if let session = currentSession {
+                securelyStoreToken(session)
+                scheduleTokenRefresh(session)
             }
         }
-        return combinedScope
-    }()
-
-    lazy var configuration = SPTConfiguration(
-        clientID: clientID,
-        redirectURL: .init(string: "\(scheme)://\(callback)")!
-    )
-
-    lazy var sessionManager: SPTSessionManager = {
-        if let tokenSwapURL = URL(string: self.tokenSwapURL),
-           let tokenRefreshURL = URL(string: self.tokenRefreshURL)
-        {
-            self.configuration.tokenSwapURL = tokenSwapURL
-            self.configuration.tokenRefreshURL = tokenRefreshURL
+    }
+    
+    private var isAuthenticating: Bool = false {
+        didSet {
+            if !isAuthenticating && currentSession == nil {
+                module?.onAuthorizationError("Authentication process ended without session")
+            }
         }
-        let manager = SPTSessionManager(configuration: self.configuration, delegate: self)
-        return manager
-    }()
+    }
 
-    public func initAuth() {
-        sessionManager.initiateSession(with: requestedScopes, options: .default)
+    private var refreshTimer: Timer?
+
+    private func scheduleTokenRefresh(_ session: SPTSession) {
+        refreshTimer?.invalidate()
+        
+        // Schedule refresh 5 minutes before expiration
+        let refreshInterval = TimeInterval(session.expirationDate.timeIntervalSinceNow - 300)
+        if refreshInterval > 0 {
+            refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: false) { [weak self] _ in
+                self?.refreshToken()
+            }
+        } else {
+            refreshToken()
+        }
+    }
+
+    private func getKeychainKey() throws -> String {
+        let clientID = try self.clientID
+        let scheme = try self.scheme
+        return "expo.modules.spotifyauth.\(scheme).\(clientID).refresh_token"
+    }
+
+    private func securelyStoreToken(_ session: SPTSession) {
+        // Only pass token to JS, store sensitive data securely
+        module?.onAccessTokenObtained(session.accessToken)
+        
+        // Store refresh token in keychain if available
+        if let refreshToken = session.refreshToken {
+            do {
+                let keychainKey = try getKeychainKey()
+                try KeychainAccess.store(
+                    key: keychainKey,
+                    data: refreshToken.data(using: .utf8)!,
+                    accessibility: .afterFirstUnlock
+                )
+            } catch {
+                print("Failed to store refresh token securely")
+            }
+        }
+    }
+
+    private func cleanupPreviousSession() {
+        // Clear any sensitive data from previous session
+        refreshTimer?.invalidate()
+        
+        do {
+            let keychainKey = try getKeychainKey()
+            try KeychainAccess.delete(key: keychainKey)
+        } catch {
+            print("Failed to clear previous refresh token")
+        }
+        
+        // Clear in-memory session data
+        currentSession = nil
+    }
+
+    private func refreshToken(retryCount: Int = 0) {
+        guard let sessionManager = self.sessionManager else {
+            handleError(SpotifyAuthError.sessionError("Session manager not available"), context: "token_refresh")
+            return
+        }
+        
+        do {
+            try sessionManager.renewSession()
+        } catch {
+            handleError(error, context: "token_refresh")
+        }
+    }
+
+    public func initAuth(showDialog: Bool = false) {
+        do {
+            guard let sessionManager = self.sessionManager else {
+                throw SpotifyAuthError.sessionError("Session manager not initialized")
+            }
+            let scopes = try self.requestedScopes
+            isAuthenticating = true
+            
+            let options: SPTConfiguration.AuthorizationOptions = showDialog ? .clientOnly : .default
+            sessionManager.initiateSession(with: scopes, options: options)
+        } catch {
+            isAuthenticating = false
+            handleError(error, context: "authentication")
+        }
+    }
+
+    private func retryAuthentication() {
+        guard !isAuthenticating else { return }
+        
+        do {
+            guard let sessionManager = self.sessionManager else {
+                throw SpotifyAuthError.sessionError("Session manager not initialized")
+            }
+            let scopes = try self.requestedScopes
+            isAuthenticating = true
+            sessionManager.initiateSession(with: scopes, options: .default)
+        } catch {
+            isAuthenticating = false
+            handleError(error, context: "authentication_retry")
+        }
     }
 
     public func sessionManager(manager _: SPTSessionManager, didInitiate session: SPTSession) {
-        print("success", session)
-        module?.onAccessTokenObtained(session.accessToken)
+        secureLog("Authentication successful")
+        isAuthenticating = false
+        currentSession = session
     }
 
     public func sessionManager(manager _: SPTSessionManager, didFailWith error: Error) {
-        print("fail", error)
-        module?.onAuthorizationError(error.localizedDescription)
+        secureLog("Authentication failed")
+        isAuthenticating = false
+        currentSession = nil
+        handleError(error, context: "authentication")
     }
 
     public func sessionManager(manager _: SPTSessionManager, didRenew session: SPTSession) {
-        print("renewed", session)
-        module?.onAccessTokenObtained(session.accessToken)
+        secureLog("Token renewed successfully")
+        currentSession = session
+    }
+    
+    public func clearSession() {
+        currentSession = nil
+        module?.onSignOut()
     }
 
     private func stringToScope(scopeString: String) -> SPTScope? {
@@ -105,5 +377,86 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         default:
             return nil
         }
+    }
+
+    private func handleError(_ error: Error, context: String) {
+        let spotifyError: SpotifyAuthError
+        
+        if let error = error as? SpotifyAuthError {
+            spotifyError = error
+        } else if let sptError = error as? SPTError {
+            switch sptError {
+            case .configurationError:
+                spotifyError = .invalidConfiguration("Invalid Spotify configuration")
+            case .authenticationError:
+                spotifyError = .authenticationFailed("Please try authenticating again")
+            case .loggedOut:
+                spotifyError = .sessionError("User logged out")
+            default:
+                spotifyError = .authenticationFailed(sptError.localizedDescription)
+            }
+        } else {
+            spotifyError = .authenticationFailed(error.localizedDescription)
+        }
+        
+        secureLog("Error in \(context): \(spotifyError.localizedDescription)")
+        
+        switch spotifyError.retryStrategy {
+        case .none:
+            module?.onAuthorizationError(spotifyError.localizedDescription)
+            cleanupPreviousSession()
+            
+        case .retry(let attempts, let delay):
+            handleRetry(error: spotifyError, context: context, remainingAttempts: attempts, delay: delay)
+            
+        case .exponentialBackoff(let maxAttempts, let initialDelay):
+            handleExponentialBackoff(error: spotifyError, context: context, remainingAttempts: maxAttempts, currentDelay: initialDelay)
+        }
+    }
+
+    private func handleRetry(error: SpotifyAuthError, context: String, remainingAttempts: Int, delay: TimeInterval) {
+        guard remainingAttempts > 0 else {
+            module?.onAuthorizationError("\(error.localizedDescription) (Max retries reached)")
+            cleanupPreviousSession()
+            return
+        }
+        
+        secureLog("Retrying \(context) in \(delay) seconds. Attempts remaining: \(remainingAttempts)")
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            switch context {
+            case "token_refresh":
+                self?.refreshToken(retryCount: 3 - remainingAttempts)
+            case "authentication":
+                self?.retryAuthentication()
+            default:
+                break
+            }
+        }
+    }
+
+    private func handleExponentialBackoff(error: SpotifyAuthError, context: String, remainingAttempts: Int, currentDelay: TimeInterval) {
+        guard remainingAttempts > 0 else {
+            module?.onAuthorizationError("\(error.localizedDescription) (Max retries reached)")
+            cleanupPreviousSession()
+            return
+        }
+        
+        secureLog("Retrying \(context) in \(currentDelay) seconds. Attempts remaining: \(remainingAttempts)")
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + currentDelay) { [weak self] in
+            switch context {
+            case "token_refresh":
+                self?.refreshToken(retryCount: 3 - remainingAttempts)
+            case "authentication":
+                self?.retryAuthentication()
+            default:
+                break
+            }
+        }
+    }
+
+    deinit {
+        cleanupPreviousSession()
     }
 }

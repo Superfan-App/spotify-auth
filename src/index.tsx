@@ -1,10 +1,10 @@
 import { EventEmitter } from "expo-modules-core";
-import React, { useContext, useEffect, useState } from "react";
-
+import React, { useContext, useEffect, useState, useCallback } from "react";
 import {
   SpotifyAuthorizationData,
   SpotifyAuthContext,
   SpotifyAuthContextInstance,
+  type AuthorizeConfig
 } from "./SpotifyAuth.types";
 import SpotifyAuthModule from "./SpotifyAuthModule";
 
@@ -28,8 +28,8 @@ function addAuthListener(listener: (data: SpotifyAuthorizationData) => void) {
 /**
  * Prompts the user to log in to Spotify and authorize your application.
  */
-function authorize(): void {
-  SpotifyAuthModule.authorize();
+export function authorize(config: AuthorizeConfig): void {
+  SpotifyAuthModule.authorize(config);
 }
 
 interface SpotifyAuthProviderProps {
@@ -40,6 +40,21 @@ export function SpotifyAuthProvider({
   children,
 }: SpotifyAuthProviderProps): JSX.Element {
   const [token, setToken] = useState<string | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const authorize = useCallback(async (config: AuthorizeConfig): Promise<void> => {
+    try {
+      setIsAuthenticating(true);
+      setError(null);
+      await SpotifyAuthModule.authorize(config);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authorization failed');
+      throw err;
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, []);
 
   useEffect(() => {
     const subscription = addAuthListener((data) => {
@@ -53,7 +68,7 @@ export function SpotifyAuthProvider({
 
   return (
     <SpotifyAuthContextInstance.Provider
-      value={{ accessToken: token, authorize }}
+      value={{ accessToken: token, authorize, isAuthenticating, error }}
     >
       {children}
     </SpotifyAuthContextInstance.Provider>
