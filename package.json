@@ -28,6 +28,7 @@
   "bugs": {
     "url": "https://github.com/superfan-app/spotify-auth/issues"
   },
+  "homepage": "https://github.com/superfan-app/spotify-auth#readme",
   "author": "Superfan App",
   "license": "MIT",
   "dependencies": {
