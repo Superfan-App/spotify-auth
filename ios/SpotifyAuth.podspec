@@ -32,7 +32,7 @@ Pod::Spec.new do |s|
     'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
   }
 
-  s.source_files = "**/*.{h,m,swift}"
+  s.source_files = "./*.{h,m,swift}"
   s.vendored_frameworks = 'Frameworks/SpotifyiOS.xcframework'
   s.preserve_paths = [
     'Frameworks/*.xcframework',
