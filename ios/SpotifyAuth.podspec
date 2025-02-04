@@ -22,7 +22,6 @@ Pod::Spec.new do |s|
     'DEFINES_MODULE' => 'YES',
     'SWIFT_COMPILATION_MODE' => 'wholemodule',
     'FRAMEWORK_SEARCH_PATHS' => '"$(PODS_ROOT)/../../node_modules/@superfan-app/spotify-auth/ios/Frameworks"',
-    'HEADER_SEARCH_PATHS' => '"$(PODS_ROOT)/../../node_modules/@superfan-app/spotify-auth/ios/Frameworks/SpotifyiOS.xcframework/ios-arm64/SpotifyiOS.framework/Headers"',
     'ENABLE_BITCODE' => 'NO',
     'IPHONEOS_DEPLOYMENT_TARGET' => '13.0',
     'SWIFT_VERSION' => '5.4'
