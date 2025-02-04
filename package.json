@@ -1,6 +1,6 @@
 {
   "name": "@superfan-app/spotify-auth",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "description": "Spotify OAuth module for Expo",
   "main": "build/index.js",
   "module": "build/index.js",
