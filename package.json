@@ -33,6 +33,7 @@
     "@expo/config-plugins": "^7.0.0"
   },
   "devDependencies": {
+    "@expo/config-types": "^49.0.0",
     "@types/react": "^18.0.0",
     "@types/react-native": "^0.70.0",
     "expo-module-scripts": "^3.0.0",

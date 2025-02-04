@@ -1,4 +1,5 @@
 import { type ConfigPlugin, createRunOncePlugin, WarningAggregator } from '@expo/config-plugins'
+import { type ExpoConfig } from '@expo/config-types'
 
 import { withSpotifyQueryScheme } from './ios/withSpotifyQueryScheme'
 import { withSpotifyURLScheme } from './ios/withSpotifyURLScheme'
@@ -27,13 +28,13 @@ function ensureDevClientInstalled(config: any) {
 const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
   ensureDevClientInstalled(config);
   
-  config = withSpotifyOAuthConfig(config, props)
+  let modifiedConfig = withSpotifyOAuthConfig(config as ExpoConfig, props) as any;
 
   // iOS specific
-  config = withSpotifyQueryScheme(config, props)
-  config = withSpotifyURLScheme(config, props)
+  modifiedConfig = withSpotifyQueryScheme(modifiedConfig, props);
+  modifiedConfig = withSpotifyURLScheme(modifiedConfig, props);
 
-  return config
+  return modifiedConfig;
 }
 
 export default createRunOncePlugin(withSpotifyAuth, pkg.name, pkg.version);

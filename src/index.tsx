@@ -17,7 +17,7 @@ type SpotifyEvents = {
 };
 
 // Create a properly typed emitter
-const emitter = new EventEmitter<SpotifyEvents>();
+const emitter = new EventEmitter(SpotifyAuthModule);
 
 function addAuthListener(listener: (data: SpotifyAuthorizationData) => void) {
   // Assert the event name is of the correct type

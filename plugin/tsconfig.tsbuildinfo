@@ -1,1 +1,1 @@
-{"root":["./src/index.ts","./src/types.ts","./src/withspotifyconfig.ts","./src/ios/withspotifyqueryscheme.ts","./src/ios/withspotifyurlscheme.ts"],"version":"5.7.2"}
+{"root":["./src/index.ts","./src/prebuild.ts","./src/types.ts","./src/withspotifyconfig.ts","./src/ios/withspotifyqueryscheme.ts","./src/ios/withspotifyurlscheme.ts"],"version":"5.7.2"}
