@@ -1,7 +1,7 @@
 import { type ConfigPlugin, createRunOncePlugin, withInfoPlist } from '@expo/config-plugins'
 import { SpotifyConfig } from './types.js'
 
-const pkg = require('../package.json');
+const pkg = require('../../package.json');
 
 function validateSpotifyConfig(config: SpotifyConfig) {
   if (!config.clientID) throw new Error("Spotify clientID is required")
