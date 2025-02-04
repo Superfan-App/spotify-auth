@@ -1,20 +1,16 @@
 import { EventEmitter } from "expo-modules-core";
 import React, { useContext, useEffect, useState, useCallback } from "react";
+
 import {
   SpotifyAuthorizationData,
   SpotifyAuthContext,
   SpotifyAuthContextInstance,
-  type AuthorizeConfig
+  type AuthorizeConfig,
 } from "./SpotifyAuth.types";
 import SpotifyAuthModule from "./SpotifyAuthModule";
 
 // First define the event name as a string literal type
 type SpotifyAuthEventName = "onSpotifyAuth"; // This should match SpotifyAuthModule.AuthEventName
-
-// Then use that type for events
-type SpotifyEvents = {
-  [K in SpotifyAuthEventName]: (data: SpotifyAuthorizationData) => void;
-};
 
 // Create a properly typed emitter
 const emitter = new EventEmitter(SpotifyAuthModule);
@@ -43,18 +39,21 @@ export function SpotifyAuthProvider({
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const authorize = useCallback(async (config: AuthorizeConfig): Promise<void> => {
-    try {
-      setIsAuthenticating(true);
-      setError(null);
-      await SpotifyAuthModule.authorize(config);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authorization failed');
-      throw err;
-    } finally {
-      setIsAuthenticating(false);
-    }
-  }, []);
+  const authorize = useCallback(
+    async (config: AuthorizeConfig): Promise<void> => {
+      try {
+        setIsAuthenticating(true);
+        setError(null);
+        await SpotifyAuthModule.authorize(config);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Authorization failed");
+        throw err;
+      } finally {
+        setIsAuthenticating(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const subscription = addAuthListener((data) => {

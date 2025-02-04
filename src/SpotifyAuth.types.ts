@@ -59,7 +59,7 @@ export const SpotifyAuthContextInstance = createContext<SpotifyAuthContext>({
   accessToken: null,
   authorize: async () => {},
   isAuthenticating: false,
-  error: null
+  error: null,
 });
 
 export interface SpotifyAuthOptions {

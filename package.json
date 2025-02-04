@@ -2,9 +2,9 @@
   "name": "@superfan-app/spotify-auth",
   "version": "0.1.22",
   "description": "Spotify OAuth module for Expo",
-  "type": "module",
-  "main": "build/index.mjs",
+  "main": "src/index.ts",
   "types": "build/index.d.ts",
+  "sideEffects": false,
   "scripts": {
     "build": "expo-module build",
     "clean": "expo-module clean",
@@ -38,21 +38,12 @@
     "@types/react": "^18.0.0",
     "@types/react-native": "^0.70.0",
     "expo-module-scripts": "^3.0.0",
-    "expo-modules-core": "^1.5.0"
+    "expo-modules-core": "^1.5.0",
+    "typescript": "^5.0.0"
   },
   "peerDependencies": {
-    "expo": ">=47.0.0",
+    "expo": "*",
     "react": "*",
-    "react-native": ">=0.70.0"
-  },
-  "files": [
-    "build",
-    "ios",
-    "android",
-    "plugin",
-    "!**/__tests__",
-    "!**/__fixtures__",
-    "!**/__mocks__",
-    "README.md"
-  ]
+    "react-native": "*"
+  }
 }

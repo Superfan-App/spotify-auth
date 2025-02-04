@@ -5,5 +5,4 @@ __tests__
 # Config files
 .env
 
-# Example directory is already excluded by not being in files
-/example/
+.github/
