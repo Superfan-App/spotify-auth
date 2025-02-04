@@ -27,10 +27,28 @@ export interface SpotifyAuthContext {
   /** The current Spotify access token, null if not authenticated */
   accessToken: string | null;
   /** Function to initiate Spotify authorization */
-  authorize: (playURI?: string) => void;
+  authorize: () => void;
 }
 
 export const SpotifyAuthContextInstance = createContext<SpotifyAuthContext>({
   accessToken: null,
-  authorize: () => {},
+  authorize: () => { },
 });
+
+export interface SpotifyAuthOptions {
+  clientId: string;
+  redirectUrl: string;
+  showDialog?: boolean;
+  tokenRefreshFunction?: (data: SpotifyTokenResponse) => void;
+}
+
+/**
+ * Response data from Spotify token endpoint
+ */
+export interface SpotifyTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token?: string;
+  scope: string;
+}

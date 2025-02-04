@@ -27,10 +27,9 @@ function addAuthListener(listener: (data: SpotifyAuthorizationData) => void) {
 
 /**
  * Prompts the user to log in to Spotify and authorize your application.
- * @param playURI Optional URI to play after authorization
  */
-function authorize(playURI?: string): void {
-  SpotifyAuthModule.authorize(playURI);
+function authorize(): void {
+  SpotifyAuthModule.authorize();
 }
 
 interface SpotifyAuthProviderProps {

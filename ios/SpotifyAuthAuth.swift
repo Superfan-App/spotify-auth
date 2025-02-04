@@ -38,14 +38,12 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         {
             self.configuration.tokenSwapURL = tokenSwapURL
             self.configuration.tokenRefreshURL = tokenRefreshURL
-            self.configuration.playURI = ""
         }
         let manager = SPTSessionManager(configuration: self.configuration, delegate: self)
         return manager
     }()
 
-    public func initAuth(_ playURI: String?) {
-        self.configuration.playURI = playURI ?? ""
+    public func initAuth() {
         sessionManager.initiateSession(with: requestedScopes, options: .default)
     }
 

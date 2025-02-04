@@ -36,8 +36,21 @@ public class SpotifyAuthModule: Module {
             // Remove any observers or listeners.
         }
 
-        Function("authorize") { (_ playURI: String?) in
-            spotifyAuth.initAuth(playURI)
+        @objc(authorize:resolver:rejecter:)
+        func authorize(_ config: NSDictionary,
+                      resolver resolve: @escaping RCTPromiseResolveBlock,
+                      rejecter reject: @escaping RCTPromiseRejectBlock) -> Void {
+            guard let clientId = config["clientId"] as? String,
+                  let redirectUrl = config["redirectUrl"] as? String else {
+                reject("invalid_config", "Missing clientId or redirectUrl", nil)
+                return
+            }
+            
+            let showDialog = config["showDialog"] as? Bool ?? false
+            
+            let configuration = SPTConfiguration(clientID: clientId, redirectURL: URL(string: redirectUrl)!)
+            
+            spotifyAuth.initAuth(configuration)
         }
 
         // Enables the module to be used as a native view. Definition components that are accepted as part of the

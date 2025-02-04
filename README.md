@@ -49,7 +49,6 @@ function YourApp() {
   const { accessToken, authorize } = useSpotifyAuth();
 
   const handleLogin = () => {
-    // Optional playURI to start playing after auth
     authorize();
   };
 
@@ -65,4 +64,4 @@ The module provides:
 - `SpotifyAuthProvider`: Context provider that manages the Spotify authentication state
 - `useSpotifyAuth`: Hook that provides:
   - `accessToken`: Current Spotify access token (null if not authenticated)
-  - `authorize(playURI?: string)`: Function to initiate Spotify authorization
+  - `authorize()`: Function to initiate Spotify authorization
