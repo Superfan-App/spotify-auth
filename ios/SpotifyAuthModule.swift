@@ -30,7 +30,7 @@ struct AuthorizeConfig: Record {
 }
 
 // Define a private enum for mapping Spotify SDK error codes.
-// (The raw values here are examples; adjust them to match your SDK’s definitions.)
+// (The raw values here are examples; adjust them to match your SDK's definitions.)
 private enum SPTErrorCode: Int {
     case authorizationFailed = 100
     case renewSessionFailed = 101
@@ -66,22 +66,25 @@ public class SpotifyAuthModule: Module {
         }
 
         AsyncFunction("authorize") { (config: AuthorizeConfig, promise: Promise) in
-            secureLog("Authorization requested")
+            secureLog("Authorization requested with clientId: \(config.clientId)")
             
             // Sanitize and validate redirect URL.
             guard let url = URL(string: config.redirectUrl),
                   url.scheme != nil,
                   url.host != nil else {
+                secureLog("Invalid redirect URL format: \(config.redirectUrl)")
                 promise.reject(SpotifyAuthError.invalidConfiguration("Invalid redirect URL format"))
                 return
             }
             
             do {
+                secureLog("Initializing auth with scopes: \(config.scopes.joined(separator: ","))")
                 try self.spotifyAuth.initAuth(config: config)
                 promise.resolve()
             } catch {
                 // Sanitize error message.
                 let sanitizedError = self.sanitizeErrorMessage(error.localizedDescription)
+                secureLog("Auth initialization failed: \(sanitizedError)")
                 promise.reject(SpotifyAuthError.authenticationFailed(sanitizedError))
             }
         }

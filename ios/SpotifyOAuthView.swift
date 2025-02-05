@@ -47,6 +47,7 @@ class SpotifyOAuthView: ExpoView {
         // Generate a random state string for CSRF protection
         self.state = UUID().uuidString
         super.init(appContext: appContext)
+        secureLog("Initializing SpotifyOAuthView with state: \(String(state.prefix(8)))...")
         setupWebView()
     }
     
@@ -139,6 +140,7 @@ class SpotifyOAuthView: ExpoView {
     }
     
     private func cleanup() {
+        secureLog("Cleaning up authentication session")
         isAuthenticating = false
         authTimeout?.invalidate()
         authTimeout = nil

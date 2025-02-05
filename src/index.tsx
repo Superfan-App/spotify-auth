@@ -26,6 +26,7 @@ function addAuthListener(listener: (data: SpotifyAuthorizationData) => void) {
  * Prompts the user to log in to Spotify and authorize your application.
  */
 export function authorize(config: AuthorizeConfig): void {
+  console.log('[SpotifyAuth] Initiating authorization request');
   SpotifyAuthModule.authorize(config);
 }
 
@@ -43,10 +44,12 @@ export function SpotifyAuthProvider({
   const authorize = useCallback(
     async (config: AuthorizeConfig): Promise<void> => {
       try {
+        console.log('[SpotifyAuth] Starting authorization process in provider');
         setIsAuthenticating(true);
         setError(null);
         await SpotifyAuthModule.authorize(config);
       } catch (err) {
+        console.error('[SpotifyAuth] Authorization error:', err);
         // Handle structured errors from the native layer
         if (err && typeof err === 'object' && 'type' in err) {
           setError(err as SpotifyAuthError);
@@ -68,11 +71,14 @@ export function SpotifyAuthProvider({
   );
 
   useEffect(() => {
+    console.log('[SpotifyAuth] Setting up auth listener');
     const subscription = addAuthListener((data) => {
+      console.log('[SpotifyAuth] Received auth event:', data.token ? 'Token received' : 'No token');
       setToken(data.token);
       setIsAuthenticating(false);
 
       if (data.error) {
+        console.error('[SpotifyAuth] Auth event error:', data.error);
         console.error('Spotify auth error:', data.error);
         setError(data.error);
       } else {

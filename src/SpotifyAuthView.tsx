@@ -10,5 +10,6 @@ const NativeView: React.ComponentType<SpotifyAuthViewProps & ViewProps> =
 export default function SpotifyAuthView(
   props: SpotifyAuthViewProps,
 ): JSX.Element {
+  console.log('Registering SpotifyAuthView with props:', JSON.stringify(props));
   return <NativeView {...props} />;
 }
