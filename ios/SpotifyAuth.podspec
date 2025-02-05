@@ -24,14 +24,14 @@ Pod::Spec.new do |s|
   s.dependency 'ExpoModulesCore'
   s.dependency 'KeychainAccess', '~> 4.2'
   
-  # Pod target build settings. Vendored frameworks automatically set up module maps,
-  # so explicit FRAMEWORK_SEARCH_PATHS are often unnecessary.
+  # Pod target build settings
   s.pod_target_xcconfig = {
     'DEFINES_MODULE'            => 'YES',
     'SWIFT_COMPILATION_MODE'    => 'wholemodule',
     'ENABLE_BITCODE'            => 'NO',
     'IPHONEOS_DEPLOYMENT_TARGET' => '13.0',
-    'SWIFT_OBJC_BRIDGING_HEADER' => '$(PODS_TARGET_SRCROOT)/SpotifyAuth-Bridging-Header.h'
+    'FRAMEWORK_SEARCH_PATHS'    => '$(PODS_TARGET_SRCROOT)/Frameworks',
+    'HEADER_SEARCH_PATHS'       => '$(PODS_TARGET_SRCROOT)/Frameworks/SpotifyiOS.xcframework/ios-arm64/SpotifyiOS.framework/Headers'
   }
   
   s.user_target_xcconfig = {
@@ -40,8 +40,9 @@ Pod::Spec.new do |s|
     'OTHER_LDFLAGS'            => '-ObjC'
   }
   
-  # Include all Swift files in the same directory as the podspec.
-  s.source_files = "*.swift"
+  # Include all source files and public headers
+  s.source_files = "*.{swift,h,m}"
+  s.public_header_files = "SpotifyAuthHeaders.h"
   
   # Specify the vendored framework (Spotify's iOS SDK).
   s.vendored_frameworks = 'Frameworks/SpotifyiOS.xcframework'
