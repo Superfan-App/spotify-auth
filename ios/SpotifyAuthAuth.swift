@@ -63,70 +63,75 @@ enum SpotifyAuthError: Error {
     }
 }
 
-final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
+final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthViewDelegate {
     weak var module: SpotifyAuthModule?
+    private var webAuthView: SpotifyOAuthView?
+    private var isUsingWebAuth = false
+    private var currentConfig: AuthorizeConfig?
 
     static let shared = SpotifyAuthAuth()
 
     private var clientID: String {
         get throws {
-            guard let value = Bundle.main.object(forInfoDictionaryKey: "SpotifyClientID") as? String,
-                  !value.isEmpty else {
-                throw SpotifyAuthError.missingConfiguration("clientID")
+            guard let config = currentConfig else {
+                throw SpotifyAuthError.missingConfiguration("No active configuration")
             }
-            return value
+            guard !config.clientId.isEmpty else {
+                throw SpotifyAuthError.missingConfiguration("clientId")
+            }
+            return config.clientId
         }
     }
 
-    private var scheme: String {
+    private var redirectURL: URL {
         get throws {
-            guard let value = Bundle.main.object(forInfoDictionaryKey: "SpotifyScheme") as? String,
-                  !value.isEmpty else {
-                throw SpotifyAuthError.missingConfiguration("scheme")
+            guard let config = currentConfig else {
+                throw SpotifyAuthError.missingConfiguration("No active configuration")
             }
-            return value
-        }
-    }
-
-    private var callback: String {
-        get throws {
-            guard let value = Bundle.main.object(forInfoDictionaryKey: "SpotifyCallback") as? String,
-                  !value.isEmpty else {
-                throw SpotifyAuthError.missingConfiguration("callback")
+            guard let url = URL(string: config.redirectUrl),
+                  url.scheme != nil,
+                  url.host != nil else {
+                throw SpotifyAuthError.invalidConfiguration("Invalid redirect URL format")
             }
-            return value
+            return url
         }
     }
 
     private var tokenRefreshURL: String {
         get throws {
-            guard let value = Bundle.main.object(forInfoDictionaryKey: "tokenRefreshURL") as? String,
-                  !value.isEmpty else {
+            guard let config = currentConfig else {
+                throw SpotifyAuthError.missingConfiguration("No active configuration")
+            }
+            guard !config.tokenRefreshURL.isEmpty else {
                 throw SpotifyAuthError.missingConfiguration("tokenRefreshURL")
             }
-            return value
+            return config.tokenRefreshURL
         }
     }
 
     private var tokenSwapURL: String {
         get throws {
-            guard let value = Bundle.main.object(forInfoDictionaryKey: "tokenSwapURL") as? String,
-                  !value.isEmpty else {
+            guard let config = currentConfig else {
+                throw SpotifyAuthError.missingConfiguration("No active configuration")
+            }
+            guard !config.tokenSwapURL.isEmpty else {
                 throw SpotifyAuthError.missingConfiguration("tokenSwapURL")
             }
-            return value
+            return config.tokenSwapURL
         }
     }
 
     private var requestedScopes: SPTScope {
         get throws {
-            guard let scopeStrings = Bundle.main.object(forInfoDictionaryKey: "SpotifyScopes") as? [String],
-                  !scopeStrings.isEmpty else {
+            guard let config = currentConfig else {
+                throw SpotifyAuthError.missingConfiguration("No active configuration")
+            }
+            guard !config.scopes.isEmpty else {
                 throw SpotifyAuthError.missingConfiguration("scopes")
             }
             
             var combinedScope: SPTScope = []
-            for scopeString in scopeStrings {
+            for scopeString in config.scopes {
                 if let scope = stringToScope(scopeString: scopeString) {
                     combinedScope.insert(scope)
                 }
@@ -167,12 +172,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     lazy var configuration: SPTConfiguration? = {
         do {
             let clientID = try self.clientID
-            let scheme = try self.scheme
-            let callback = try self.callback
-            
-            guard let redirectUrl = URL(string: "\(scheme)://\(callback)") else {
-                throw SpotifyAuthError.invalidConfiguration("Invalid redirect URL formation")
-            }
+            let redirectUrl = try self.redirectURL
             
             let config = SPTConfiguration(clientID: clientID, redirectURL: redirectUrl)
             try validateAndConfigureURLs(config)
@@ -228,8 +228,8 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
 
     private func getKeychainKey() throws -> String {
         let clientID = try self.clientID
-        let scheme = try self.scheme
-        return "expo.modules.spotifyauth.\(scheme).\(clientID).refresh_token"
+        let redirectUrl = try self.redirectURL
+        return "expo.modules.spotifyauth.\(redirectUrl.scheme ?? "unknown").\(clientID).refresh_token"
     }
 
     private func securelyStoreToken(_ session: SPTSession) {
@@ -279,23 +279,48 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         }
     }
 
-    public func initAuth(showDialog: Bool = false, campaign: String? = nil) {
+    public func initAuth(config: AuthorizeConfig) {
         do {
+            // Store the current configuration
+            self.currentConfig = config
+            
             guard let sessionManager = self.sessionManager else {
                 throw SpotifyAuthError.sessionError("Session manager not initialized")
             }
             let scopes = try self.requestedScopes
             isAuthenticating = true
             
-            // If showDialog is true, we want to force the authorization dialog
-            // This is different from clientOnly which would force using Spotify app
-            if showDialog {
-                sessionManager.alwaysShowAuthorizationDialog = true
+            // Check if Spotify app is installed
+            if sessionManager.isSpotifyAppInstalled {
+                // Use app-switch auth
+                if config.showDialog {
+                    sessionManager.alwaysShowAuthorizationDialog = true
+                }
+                sessionManager.initiateSession(with: scopes, options: .default, campaign: config.campaign)
+            } else {
+                // Fall back to web auth
+                isUsingWebAuth = true
+                let clientId = try self.clientID
+                let redirectUrl = try self.redirectURL
+                
+                // Create and configure web auth view
+                let webAuthView = SpotifyOAuthView(appContext: nil)
+                webAuthView.delegate = self
+                self.webAuthView = webAuthView
+                
+                // Convert SPTScope to string array for web auth
+                let scopeStrings = scopes.scopesToStringArray()
+                
+                // Start web auth flow
+                webAuthView.startOAuthFlow(
+                    clientId: clientId,
+                    redirectUri: redirectUrl.absoluteString,
+                    scopes: scopeStrings
+                )
+                
+                // Notify module to present web auth view
+                module?.presentWebAuth(webAuthView)
             }
-            
-            // Use default authorization which will automatically choose the best method
-            // (Spotify app if installed, web view if not)
-            sessionManager.initiateSessionWithScope(scopes, options: .default, campaign: campaign)
         } catch {
             isAuthenticating = false
             handleError(error, context: "authentication")
@@ -311,8 +336,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
             }
             let scopes = try self.requestedScopes
             isAuthenticating = true
-            // Updated: Use .default instead of empty array cast
-            sessionManager.initiateSessionWithScope(scopes, options: .default, campaign: nil)
+            sessionManager.initiateSession(with: scopes, options: .default, campaign: nil)
         } catch {
             isAuthenticating = false
             handleError(error, context: "authentication_retry")
@@ -459,5 +483,112 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
 
     deinit {
         cleanupPreviousSession()
+    }
+
+    // MARK: - SpotifyOAuthViewDelegate
+    
+    func oauthView(_ view: SpotifyOAuthView, didReceiveCode code: String) {
+        // Exchange the code for tokens using token swap URL
+        exchangeCodeForToken(code)
+        
+        // Cleanup web view
+        cleanupWebAuth()
+    }
+    
+    func oauthView(_ view: SpotifyOAuthView, didFailWithError error: Error) {
+        handleError(error, context: "web_authentication")
+        cleanupWebAuth()
+    }
+    
+    func oauthViewDidCancel(_ view: SpotifyOAuthView) {
+        module?.onAuthorizationError("User cancelled authentication")
+        cleanupWebAuth()
+    }
+    
+    private func cleanupWebAuth() {
+        isUsingWebAuth = false
+        webAuthView = nil
+        currentConfig = nil
+        module?.dismissWebAuth()
+    }
+    
+    private func exchangeCodeForToken(_ code: String) {
+        guard let tokenSwapURL = try? URL(string: self.tokenSwapURL) else {
+            handleError(SpotifyAuthError.invalidConfiguration("Invalid token swap URL"), context: "token_exchange")
+            return
+        }
+        
+        var request = URLRequest(url: tokenSwapURL)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        
+        let params = [
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": try? self.redirectURL.absoluteString,
+            "client_id": try? self.clientID
+        ].compactMapValues { $0 }
+        
+        request.httpBody = params
+            .map { "\($0)=\($1)" }
+            .joined(separator: "&")
+            .data(using: .utf8)
+        
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            if let error = error {
+                self?.handleError(error, context: "token_exchange")
+                return
+            }
+            
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let accessToken = json["access_token"] as? String,
+                  let refreshToken = json["refresh_token"] as? String,
+                  let expiresIn = json["expires_in"] as? TimeInterval else {
+                self?.handleError(SpotifyAuthError.tokenError("Invalid token response"), context: "token_exchange")
+                return
+            }
+            
+            // Create session from token response
+            let expirationDate = Date(timeIntervalSinceNow: expiresIn)
+            if let session = SPTSession(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate) {
+                DispatchQueue.main.async {
+                    self?.currentSession = session
+                    self?.module?.onAccessTokenObtained(accessToken)
+                }
+            }
+        }
+        
+        task.resume()
+    }
+}
+
+// Helper extension to convert SPTScope to string array
+extension SPTScope {
+    func scopesToStringArray() -> [String] {
+        var scopes: [String] = []
+        
+        if contains(.playlistReadPrivate) { scopes.append("playlist-read-private") }
+        if contains(.playlistReadCollaborative) { scopes.append("playlist-read-collaborative") }
+        if contains(.playlistModifyPublic) { scopes.append("playlist-modify-public") }
+        if contains(.playlistModifyPrivate) { scopes.append("playlist-modify-private") }
+        if contains(.userFollowRead) { scopes.append("user-follow-read") }
+        if contains(.userFollowModify) { scopes.append("user-follow-modify") }
+        if contains(.userLibraryRead) { scopes.append("user-library-read") }
+        if contains(.userLibraryModify) { scopes.append("user-library-modify") }
+        if contains(.userReadBirthDate) { scopes.append("user-read-birthdate") }
+        if contains(.userReadEmail) { scopes.append("user-read-email") }
+        if contains(.userReadPrivate) { scopes.append("user-read-private") }
+        if contains(.userTopRead) { scopes.append("user-top-read") }
+        if contains(.ugcImageUpload) { scopes.append("ugc-image-upload") }
+        if contains(.streaming) { scopes.append("streaming") }
+        if contains(.appRemoteControl) { scopes.append("app-remote-control") }
+        if contains(.userReadPlaybackState) { scopes.append("user-read-playback-state") }
+        if contains(.userModifyPlaybackState) { scopes.append("user-modify-playback-state") }
+        if contains(.userReadCurrentlyPlaying) { scopes.append("user-read-currently-playing") }
+        if contains(.userReadRecentlyPlayed) { scopes.append("user-read-recently-played") }
+        if contains(.openid) { scopes.append("openid") }
+        
+        return scopes
     }
 }

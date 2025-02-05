@@ -31,6 +31,15 @@ struct AuthorizeConfig: Record {
 
     @Field
     var campaign: String?
+    
+    @Field
+    var tokenSwapURL: String
+    
+    @Field
+    var tokenRefreshURL: String
+    
+    @Field
+    var scopes: [String]
 }
 
 public class SpotifyAuthModule: Module {
@@ -72,11 +81,8 @@ public class SpotifyAuthModule: Module {
                 return
             }
             
-            // Create a configuration (this example does not use the variable afterwards).
-            let _ = SPTConfiguration(clientID: config.clientId, redirectURL: url)
-            
             do {
-                try spotifyAuth.initAuth(showDialog: config.showDialog, campaign: config.campaign)
+                try spotifyAuth.initAuth(config: config)
                 promise.resolve()
             } catch {
                 // Sanitize error message.
@@ -149,5 +155,46 @@ public class SpotifyAuthModule: Module {
             "error": sanitizedError
         ]
         sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
+    }
+
+    func presentWebAuth(_ webAuthView: SpotifyOAuthView) {
+        // Find the top-most view controller to present from
+        guard let topViewController = UIApplication.shared.keyWindow?.rootViewController?.topMostViewController() else {
+            onAuthorizationError("Could not present web authentication")
+            return
+        }
+        
+        // Create and configure container view controller
+        let containerVC = UIViewController()
+        containerVC.view = webAuthView
+        containerVC.modalPresentationStyle = .fullScreen
+        
+        // Present the web auth view
+        DispatchQueue.main.async {
+            topViewController.present(containerVC, animated: true, completion: nil)
+        }
+    }
+    
+    func dismissWebAuth() {
+        // Find and dismiss the web auth view controller
+        DispatchQueue.main.async {
+            UIApplication.shared.keyWindow?.rootViewController?.topMostViewController()?.dismiss(animated: true)
+        }
+    }
+}
+
+// Helper extension to find top-most view controller
+extension UIViewController {
+    func topMostViewController() -> UIViewController {
+        if let presented = presentedViewController {
+            return presented.topMostViewController()
+        }
+        if let navigation = self as? UINavigationController {
+            return navigation.visibleViewController?.topMostViewController() ?? navigation
+        }
+        if let tab = self as? UITabBarController {
+            return tab.selectedViewController?.topMostViewController() ?? tab
+        }
+        return self
     }
 }
