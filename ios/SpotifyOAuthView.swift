@@ -64,7 +64,7 @@ class SpotifyOAuthView: ExpoView {
     
     private func setupWebView() {
         // Ensure we're on the main thread for UI setup
-        guard Thread.isMainThread else {
+        if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
                 self?.setupWebView()
             }
@@ -87,7 +87,7 @@ class SpotifyOAuthView: ExpoView {
             return configuration
         }()
 
-        // Initialize webview on main thread with error handling
+        // Initialize webview with error handling
         do {
             webView = WKWebView(frame: .zero, configuration: config)
             guard webView != nil else {
@@ -97,41 +97,51 @@ class SpotifyOAuthView: ExpoView {
             
             webView.navigationDelegate = self
             webView.allowsBackForwardNavigationGestures = true
-            webView.customUserAgent = "SpotifyAuth-iOS/1.0" // Custom UA to identify our app
+            webView.customUserAgent = "SpotifyAuth-iOS/1.0"
             
-            // Add loading indicator
+            // Create UI elements
             let activityIndicator = UIActivityIndicatorView(style: .medium)
             activityIndicator.translatesAutoresizingMaskIntoConstraints = false
             activityIndicator.hidesWhenStopped = true
             
-            addSubview(webView)
-            addSubview(activityIndicator)
-            
-            // Setup constraints
-            webView.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                webView.topAnchor.constraint(equalTo: topAnchor),
-                webView.leadingAnchor.constraint(equalTo: leadingAnchor),
-                webView.trailingAnchor.constraint(equalTo: trailingAnchor),
-                webView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            // Perform all UI operations in a single block
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
                 
-                activityIndicator.centerXAnchor.constraint(equalTo: centerXAnchor),
-                activityIndicator.centerYAnchor.constraint(equalTo: centerYAnchor)
-            ])
-            
-            // Setup modern KVO observation
-            observerToken = webView.observe(\.isLoading, options: [.new]) { [weak self] _, _ in
-                if let activityIndicator = self?.subviews.first(where: { $0 is UIActivityIndicatorView }) as? UIActivityIndicatorView {
-                    if self?.webView.isLoading == true {
-                        activityIndicator.startAnimating()
-                    } else {
-                        activityIndicator.stopAnimating()
+                self.addSubview(self.webView)
+                self.addSubview(activityIndicator)
+                
+                // Setup constraints
+                self.webView.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    self.webView.topAnchor.constraint(equalTo: self.topAnchor),
+                    self.webView.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+                    self.webView.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+                    self.webView.bottomAnchor.constraint(equalTo: self.bottomAnchor),
+                    
+                    activityIndicator.centerXAnchor.constraint(equalTo: self.centerXAnchor),
+                    activityIndicator.centerYAnchor.constraint(equalTo: self.centerYAnchor)
+                ])
+                
+                // Setup modern KVO observation
+                self.observerToken = self.webView.observe(\.isLoading, options: [.new]) { [weak self] _, _ in
+                    DispatchQueue.main.async {
+                        if let activityIndicator = self?.subviews.first(where: { $0 is UIActivityIndicatorView }) as? UIActivityIndicatorView {
+                            if self?.webView.isLoading == true {
+                                activityIndicator.startAnimating()
+                            } else {
+                                activityIndicator.stopAnimating()
+                            }
+                        }
                     }
                 }
             }
         } catch {
             secureLog("Failed to setup WebView: \(error.localizedDescription)")
-            delegate?.oauthView(self, didFailWithError: SpotifyOAuthError.authorizationError("Failed to initialize web view"))
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.delegate?.oauthView(self, didFailWithError: SpotifyOAuthError.authorizationError("Failed to initialize web view"))
+            }
         }
     }
     
