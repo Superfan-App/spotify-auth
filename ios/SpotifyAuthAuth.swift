@@ -382,6 +382,8 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
             return .userReadCurrentlyPlaying
         case "user-read-recently-played":
             return .userReadRecentlyPlayed
+        case "openid":
+            return .openid
         default:
             return nil
         }
