@@ -346,13 +346,14 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
         }
         
         // Get scopes from Info.plist and convert to SPTScope
-        let scopes = try self.scopes.reduce(into: SPTScope()) { result, scopeString in
+        let scopes = try self.scopes
+        let sptScopes = scopes.reduce(into: SPTScope()) { result, scopeString in
             if let scope = stringToScope(scopeString: scopeString) {
                 result.insert(scope)
             }
         }
         
-        if scopes.isEmpty {
+        if sptScopes.isEmpty {
             throw SpotifyAuthError.invalidConfiguration("No valid scopes found in configuration")
         }
         
@@ -363,7 +364,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
             if config.showDialog {
                 sessionManager.alwaysShowAuthorizationDialog = true
             }
-            sessionManager.initiateSession(with: scopes, options: .default, campaign: config.campaign)
+            sessionManager.initiateSession(with: sptScopes, options: .default, campaign: config.campaign)
         } else {
             // Use web auth as fallback
             let webView = SpotifyOAuthView(appContext: nil)
@@ -399,7 +400,11 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
         throw SpotifyAuthError.sessionError("Session manager not initialized")
       }
       let scopes = try self.scopes
-      let sptScopes = SPTScope(rawValue: scopes.joined(separator: " "))
+      let sptScopes = scopes.reduce(into: SPTScope()) { result, scopeString in
+          if let scope = stringToScope(scopeString: scopeString) {
+              result.insert(scope)
+          }
+      }
       isAuthenticating = true
       sessionManager.initiateSession(with: sptScopes, options: .default, campaign: nil)
     } catch {
