@@ -2,6 +2,15 @@ import ExpoModulesCore
 import SpotifyiOS
 import KeychainAccess
 
+extension SPTSession {
+    convenience init?(accessToken: String, refreshToken: String, expirationDate: Date) {
+        self.init()  // Call the parameterless initializer
+        setValue(accessToken, forKey: "accessToken")
+        setValue(refreshToken, forKey: "refreshToken")
+        setValue(expirationDate, forKey: "expirationDate")
+    }
+}
+
 enum SpotifyAuthError: Error {
     case missingConfiguration(String)
     case invalidConfiguration(String)

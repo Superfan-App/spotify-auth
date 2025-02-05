@@ -92,8 +92,8 @@ public class SpotifyAuthModule: Module {
         }
 
         // Enables the module to be used as a native view.
-        View(SpotifyAuthView.self) {
-            Prop("name") { (_: SpotifyAuthView, prop: String) in
+        View(SpotifyOAuthView.self) {
+            Prop("name") { (_: SpotifyOAuthView, prop: String) in
                 secureLog("View prop updated: \(prop)")
             }
         }
@@ -158,8 +158,7 @@ public class SpotifyAuthModule: Module {
     }
 
     func presentWebAuth(_ webAuthView: SpotifyOAuthView) {
-        // Find the top-most view controller to present from
-        guard let topViewController = UIApplication.shared.keyWindow?.rootViewController?.topMostViewController() else {
+        guard let topViewController = UIApplication.shared.currentKeyWindow?.rootViewController?.topMostViewController() else {
             onAuthorizationError("Could not present web authentication")
             return
         }
@@ -178,7 +177,7 @@ public class SpotifyAuthModule: Module {
     func dismissWebAuth() {
         // Find and dismiss the web auth view controller
         DispatchQueue.main.async {
-            UIApplication.shared.keyWindow?.rootViewController?.topMostViewController()?.dismiss(animated: true)
+            UIApplication.shared.currentKeyWindow?.rootViewController?.topMostViewController().dismiss(animated: true)
         }
     }
 }
@@ -196,5 +195,20 @@ extension UIViewController {
             return tab.selectedViewController?.topMostViewController() ?? tab
         }
         return self
+    }
+}
+
+// Extension to safely get key window on iOS 13+
+extension UIApplication {
+    var currentKeyWindow: UIWindow? {
+        if #available(iOS 13, *) {
+            return self.connectedScenes
+                .filter { $0.activationState == .foregroundActive }
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first(where: { $0.isKeyWindow })
+        } else {
+            return self.keyWindow
+        }
     }
 }
