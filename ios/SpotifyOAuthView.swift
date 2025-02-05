@@ -44,6 +44,12 @@ class SpotifyOAuthView: ExpoView {
     private static let authTimeoutInterval: TimeInterval = 300 // 5 minutes
     private var observerToken: NSKeyValueObservation?
     
+    private func secureLog(_ message: String) {
+        #if DEBUG
+        print("[SpotifyOAuthView] \(message)")
+        #endif
+    }
+    
     required init(appContext: AppContext? = nil) {
         // Generate a random state string for CSRF protection
         self.state = UUID().uuidString
