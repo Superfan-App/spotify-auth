@@ -557,7 +557,11 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   // MARK: - Web Auth Cancellation
   
   func webAuthViewDidCancel() {
-    oauthViewDidCancel(webAuthView!)
+    guard let webView = webAuthView else {
+      module?.onAuthorizationError(SpotifyAuthError.sessionError("Web auth view not found"))
+      return
+    }
+    oauthViewDidCancel(webView)
   }
   
   // MARK: - Helpers

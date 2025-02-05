@@ -78,19 +78,19 @@ public class SpotifyAuthModule: Module {
         View(SpotifyOAuthView.self) {
             Events(spotifyAuthorizationEventName)
             
-            Prop("name") { (view: SpotifyOAuthView, prop: String) in
+            Prop("name") { (view: SpotifyOAuthView, _: String) in
                 DispatchQueue.main.async {
-                    secureLog("View prop updated: \(prop)")
+                    secureLog("View prop updated")
                 }
             }
             
-            OnViewDidLoad { view in
+            OnViewDidMount { view in
                 DispatchQueue.main.async {
                     secureLog("OAuth view loaded")
                 }
             }
             
-            OnViewDidLayoutSubviews { view in
+            OnLayout { view in
                 DispatchQueue.main.async {
                     secureLog("OAuth view layout updated")
                 }
