@@ -547,6 +547,12 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     task.resume()
   }
   
+  // MARK: - Web Auth Cancellation
+  
+  func webAuthViewDidCancel() {
+    oauthViewDidCancel(webAuthView!)
+  }
+  
   // MARK: - Helpers
   
   private func stringToScope(scopeString: String) -> SPTScope? {

@@ -244,12 +244,25 @@ public class SpotifyAuthModule: Module {
         // Create and configure container view controller
         let containerVC = UIViewController()
         containerVC.view = webAuthView
-        containerVC.modalPresentationStyle = .fullScreen
+        
+        // Create navigation controller and configure it
+        let navigationController = UINavigationController(rootViewController: containerVC)
+        navigationController.modalPresentationStyle = .fullScreen
+        
+        // Add cancel button
+        let cancelButton = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(dismissWebAuthWithCancel))
+        containerVC.navigationItem.leftBarButtonItem = cancelButton
+        containerVC.navigationItem.title = "Spotify Login"
         
         // Present the web auth view
         DispatchQueue.main.async {
-            topViewController.present(containerVC, animated: true, completion: nil)
+            topViewController.present(navigationController, animated: true, completion: nil)
         }
+    }
+    
+    @objc private func dismissWebAuthWithCancel() {
+        spotifyAuth.webAuthViewDidCancel()
+        dismissWebAuth()
     }
     
     func dismissWebAuth() {
