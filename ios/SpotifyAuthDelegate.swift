@@ -17,7 +17,8 @@ public class SpotifyAuthDelegate: ExpoAppDelegateSubscriber, SPTSessionManagerDe
     }
 
     public func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        spotifyAuth.sessionManager.application(app, open: url, options: options)
+        // Use optional chaining to avoid calling on a nil session manager.
+        spotifyAuth.sessionManager?.application(app, open: url, options: options)
         return true
     }
 }

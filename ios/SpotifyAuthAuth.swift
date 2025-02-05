@@ -233,33 +233,33 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     }
 
     private func securelyStoreToken(_ session: SPTSession) {
-        // Only pass token to JS, store sensitive data securely
+        // Pass token to JS and securely store refresh token
         module?.onAccessTokenObtained(session.accessToken)
         
-        // Store refresh token in keychain if available
-        if let refreshToken = session.refreshToken {
+        // Since refreshToken is now a non-optional String, we simply check for an empty value.
+        let refreshToken = session.refreshToken
+        if !refreshToken.isEmpty {
             do {
                 let keychainKey = try getKeychainKey()
-                try KeychainAccess.store(
-                    key: keychainKey,
-                    data: refreshToken.data(using: .utf8)!,
-                    accessibility: .afterFirstUnlock
-                )
+                // Create a Keychain instance (using bundle identifier as the service)
+                let keychain = Keychain(service: Bundle.main.bundleIdentifier ?? "com.superfan.app")
+                    .accessibility(.afterFirstUnlock)
+                try keychain.set(refreshToken, key: keychainKey)
             } catch {
-                print("Failed to store refresh token securely")
+                print("Failed to store refresh token securely: \(error)")
             }
         }
     }
 
     private func cleanupPreviousSession() {
-        // Clear any sensitive data from previous session
         refreshTimer?.invalidate()
         
         do {
             let keychainKey = try getKeychainKey()
-            try KeychainAccess.delete(key: keychainKey)
+            let keychain = Keychain(service: Bundle.main.bundleIdentifier ?? "com.superfan.app")
+            try keychain.remove(keychainKey)
         } catch {
-            print("Failed to clear previous refresh token")
+            print("Failed to clear previous refresh token: \(error)")
         }
         
         // Clear in-memory session data
@@ -287,8 +287,9 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
             let scopes = try self.requestedScopes
             isAuthenticating = true
             
-            let options: SPTConfiguration.AuthorizationOptions = showDialog ? .clientOnly : .default
-            sessionManager.initiateSession(with: scopes, options: options)
+            // Updated: Use SPTSessionManagerOptions (an OptionSet) and pass nil for campaign.
+            let options: SPTSessionManagerOptions = showDialog ? .clientOnly : []
+            sessionManager.initiateSession(with: scopes, options: options, campaign: nil)
         } catch {
             isAuthenticating = false
             handleError(error, context: "authentication")
@@ -304,7 +305,8 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
             }
             let scopes = try self.requestedScopes
             isAuthenticating = true
-            sessionManager.initiateSession(with: scopes, options: .default)
+            // Updated: Use SPTSessionManagerOptions and pass nil for campaign.
+            sessionManager.initiateSession(with: scopes, options: [], campaign: nil)
         } catch {
             isAuthenticating = false
             handleError(error, context: "authentication_retry")
@@ -382,19 +384,10 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     private func handleError(_ error: Error, context: String) {
         let spotifyError: SpotifyAuthError
         
-        if let error = error as? SpotifyAuthError {
-            spotifyError = error
-        } else if let sptError = error as? SPTError {
-            switch sptError {
-            case .configurationError:
-                spotifyError = .invalidConfiguration("Invalid Spotify configuration")
-            case .authenticationError:
-                spotifyError = .authenticationFailed("Please try authenticating again")
-            case .loggedOut:
-                spotifyError = .sessionError("User logged out")
-            default:
-                spotifyError = .authenticationFailed(sptError.localizedDescription)
-            }
+        // Instead of switching on SPTError cases (which are no longer available),
+        // we simply wrap the error’s description.
+        if error is SPTError {
+            spotifyError = .authenticationFailed(error.localizedDescription)
         } else {
             spotifyError = .authenticationFailed(error.localizedDescription)
         }

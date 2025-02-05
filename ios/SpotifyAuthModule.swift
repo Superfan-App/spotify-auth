@@ -33,9 +33,6 @@ struct AuthorizeConfig: Record {
 public class SpotifyAuthModule: Module {
     let spotifyAuth = SpotifyAuthAuth.shared
 
-    // Each module class must implement the definition function. The definition consists of components
-    // that describes the module's functionality and behavior.
-    // See https://docs.expo.dev/modules/module-api for more details about available components.
     public func definition() -> ModuleDefinition {
         Name("SpotifyAuth")
 
@@ -51,12 +48,12 @@ public class SpotifyAuthModule: Module {
         // Defines event names that the module can send to JavaScript.
         Events(SPOTIFY_AUTHORIZATION_EVENT_NAME)
 
-        // This will be called when JS starts observing the event.
+        // Called when JS starts observing the event.
         OnStartObserving {
             secureLog("Started observing events")
         }
 
-        // This will be called when JS stops observing the event.
+        // Called when JS stops observing the event.
         OnStopObserving {
             secureLog("Stopped observing events")
         }
@@ -64,7 +61,7 @@ public class SpotifyAuthModule: Module {
         AsyncFunction("authorize") { (config: AuthorizeConfig, promise: Promise) in
             secureLog("Authorization requested")
             
-            // Sanitize and validate redirect URL
+            // Sanitize and validate redirect URL.
             guard let url = URL(string: config.redirectUrl),
                   url.scheme != nil,
                   url.host != nil else {
@@ -72,22 +69,21 @@ public class SpotifyAuthModule: Module {
                 return
             }
             
-            let configuration = SPTConfiguration(clientID: config.clientId, redirectURL: url)
+            // Create a configuration (this example does not use the variable afterwards).
+            let _ = SPTConfiguration(clientID: config.clientId, redirectURL: url)
             
             do {
                 try spotifyAuth.initAuth(showDialog: config.showDialog)
                 promise.resolve()
             } catch {
-                // Sanitize error message
+                // Sanitize error message.
                 let sanitizedError = sanitizeErrorMessage(error.localizedDescription)
                 promise.reject(SpotifyAuthError.authenticationFailed(sanitizedError))
             }
         }
 
-        // Enables the module to be used as a native view. Definition components that are accepted as part of the
-        // view definition: Prop, Events.
+        // Enables the module to be used as a native view.
         View(SpotifyAuthView.self) {
-            // Defines a setter for the `name` prop.
             Prop("name") { (_: SpotifyAuthView, prop: String) in
                 secureLog("View prop updated: \(prop)")
             }
@@ -95,7 +91,7 @@ public class SpotifyAuthModule: Module {
     }
 
     private func sanitizeErrorMessage(_ message: String) -> String {
-        // Remove any potential sensitive data from error messages
+        // Remove potential sensitive data from error messages.
         let sensitivePatterns = [
             "(?i)client[_-]?id",
             "(?i)token",
@@ -124,7 +120,7 @@ public class SpotifyAuthModule: Module {
         let eventData: [String: Any] = [
             "success": true,
             "token": token,
-            "error": nil
+            "error": NSNull()  // Use NSNull() instead of nil.
         ]
         sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
     }
@@ -134,8 +130,8 @@ public class SpotifyAuthModule: Module {
         secureLog("User signed out")
         let eventData: [String: Any] = [
             "success": true,
-            "token": nil,
-            "error": nil
+            "token": NSNull(),  // Use NSNull() instead of nil.
+            "error": NSNull()   // Use NSNull() instead of nil.
         ]
         sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
     }
@@ -146,7 +142,7 @@ public class SpotifyAuthModule: Module {
         secureLog("Authorization error: \(sanitizedError)")
         let eventData: [String: Any] = [
             "success": false,
-            "token": nil,
+            "token": NSNull(),  // Use NSNull() instead of nil.
             "error": sanitizedError
         ]
         sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
