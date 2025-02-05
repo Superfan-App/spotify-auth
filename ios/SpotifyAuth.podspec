@@ -11,22 +11,18 @@ Pod::Spec.new do |s|
   s.license          = package['license']
   s.author           = package['author']
   s.homepage         = package['homepage']
-  
-  # Minimum iOS version requirement and Swift version
   s.platform         = :ios, '13.0'
   s.swift_version    = '5.4'
   
-  # Define your source. It’s best to specify a tag to ensure the right version is fetched.
   s.source           = { 
     git: 'https://github.com/superfan-app/spotify-auth.git',
     tag: package['version']
   }
   
-  # Mark the module as a static framework.
   s.static_framework = true
   
-  # Declare dependency on ExpoModulesCore
   s.dependency 'ExpoModulesCore'
+  s.dependency 'KeychainAccess', '~> 4.2'
   
   # Pod target build settings. Vendored frameworks automatically set up module maps,
   # so explicit FRAMEWORK_SEARCH_PATHS are often unnecessary.
