@@ -399,8 +399,9 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
         throw SpotifyAuthError.sessionError("Session manager not initialized")
       }
       let scopes = try self.scopes
+      let sptScopes = SPTScope(rawValue: scopes.joined(separator: " "))
       isAuthenticating = true
-      sessionManager.initiateSession(with: scopes, options: .default, campaign: nil)
+      sessionManager.initiateSession(with: sptScopes, options: .default, campaign: nil)
     } catch {
       isAuthenticating = false
       handleError(error, context: "authentication_retry")
