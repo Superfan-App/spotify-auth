@@ -83,7 +83,7 @@ class SpotifyOAuthView: ExpoView {
             // Ensure cookies and data are not persisted
             let dataStore = WKWebsiteDataStore.nonPersistent()
             configuration.websiteDataStore = dataStore
-            secureLog("WebView configuration created with non-persistent data store")
+            self.secureLog("WebView configuration created with non-persistent data store")
             return configuration
         }()
 
@@ -93,7 +93,7 @@ class SpotifyOAuthView: ExpoView {
             guard webView != nil else {
                 throw NSError(domain: "SpotifyAuth", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to initialize WebView"])
             }
-            secureLog("WebView successfully initialized")
+            self.secureLog("WebView successfully initialized")
             
             webView.navigationDelegate = self
             webView.allowsBackForwardNavigationGestures = true
@@ -251,7 +251,7 @@ class SpotifyOAuthView: ExpoView {
             }
             
             if webView.isLoading {
-                secureLog("Warning: WebView is already loading content, stopping previous load")
+                self.secureLog("Warning: WebView is already loading content, stopping previous load")
                 webView.stopLoading()
             }
             
