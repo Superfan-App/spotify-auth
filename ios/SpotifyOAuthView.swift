@@ -103,7 +103,7 @@ class SpotifyOAuthView: ExpoView {
         }
     }
     
-    func startOAuthFlow(clientId: String, redirectUri: String, scopes: [String]) {
+    func startOAuthFlow(clientId: String, redirectUri: String, scopes: [String], showDialog: Bool = false, campaign: String? = nil) {
         guard !isAuthenticating else { return }
         isAuthenticating = true
         
@@ -123,7 +123,13 @@ class SpotifyOAuthView: ExpoView {
             ofTypes: [WKWebsiteDataTypeCookies, WKWebsiteDataTypeSessionStorage],
             modifiedSince: Date(timeIntervalSince1970: 0)
         ) { [weak self] in
-            self?.initiateAuthRequest(clientId: clientId, redirectUri: redirectUri, scopes: scopes)
+            self?.initiateAuthRequest(
+                clientId: clientId,
+                redirectUri: redirectUri,
+                scopes: scopes,
+                showDialog: showDialog,
+                campaign: campaign
+            )
         }
     }
     
@@ -153,21 +159,27 @@ class SpotifyOAuthView: ExpoView {
         ) { }
     }
     
-    private func initiateAuthRequest(clientId: String, redirectUri: String, scopes: [String]) {
+    private func initiateAuthRequest(clientId: String, redirectUri: String, scopes: [String], showDialog: Bool, campaign: String?) {
         guard var urlComponents = URLComponents(string: "https://accounts.spotify.com/authorize") else {
             isAuthenticating = false
             delegate?.oauthView(self, didFailWithError: SpotifyOAuthError.invalidRedirectURL)
             return
         }
         
-        urlComponents.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "client_id", value: clientId),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "redirect_uri", value: redirectUri),
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "scope", value: scopes.joined(separator: " ")),
-            URLQueryItem(name: "show_dialog", value: "true")
+            URLQueryItem(name: "show_dialog", value: showDialog ? "true" : "false")
         ]
+        
+        if let campaign = campaign {
+            queryItems.append(URLQueryItem(name: "campaign", value: campaign))
+        }
+        
+        urlComponents.queryItems = queryItems
         
         guard let url = urlComponents.url else {
             isAuthenticating = false

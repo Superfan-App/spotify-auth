@@ -1,6 +1,31 @@
 import { createContext } from "react";
 
 /**
+ * Available Spotify authorization scopes.
+ * @see https://developer.spotify.com/documentation/general/guides/authorization/scopes/
+ */
+export type SpotifyScopes =
+  | 'app-remote-control'
+  | 'playlist-modify-private'
+  | 'playlist-modify-public'
+  | 'playlist-read-collaborative'
+  | 'playlist-read-private'
+  | 'streaming'
+  | 'user-follow-modify'
+  | 'user-follow-read'
+  | 'user-library-modify'
+  | 'user-library-read'
+  | 'user-modify-playback-state'
+  | 'user-read-currently-playing'
+  | 'user-read-email'
+  | 'user-read-playback-position'
+  | 'user-read-playback-state'
+  | 'user-read-private'
+  | 'user-read-recently-played'
+  | 'user-top-read'
+  | 'openid';
+
+/**
  * Event data structure for Spotify authorization events
  */
 export interface SpotifyAuthEvent {
@@ -58,13 +83,10 @@ export type SpotifyAuthError = {
 }
 
 /**
- * Configuration for the authorization request
+ * Configuration for the authorization request.
+ * These are runtime options that can be changed between auth attempts.
  */
 export interface AuthorizeConfig {
-  /** Spotify Client ID */
-  clientId: string;
-  /** OAuth redirect URL */
-  redirectUrl: string;
   /** Whether to show the auth dialog */
   showDialog?: boolean;
   /** Campaign identifier for attribution */

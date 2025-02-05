@@ -12,6 +12,16 @@ function validateSpotifyConfig(config: SpotifyConfig) {
   if (!Array.isArray(config.scopes) || config.scopes.length === 0) {
     throw new Error("At least one scope is required")
   }
+
+  // Validate URL scheme format
+  if (!/^[a-z][a-z0-9+.-]*$/i.test(config.scheme)) {
+    throw new Error("Invalid URL scheme format. Scheme should start with a letter and contain only letters, numbers, plus, period, or hyphen.")
+  }
+
+  // Validate callback path
+  if (!/^[a-z0-9\-_\/]+$/i.test(config.callback)) {
+    throw new Error("Invalid callback path format. Path should contain only letters, numbers, hyphens, underscores, and forward slashes.")
+  }
 }
 
 function validateScheme(scheme: string) {
@@ -50,13 +60,15 @@ const withSpotifyURLSchemes: ConfigPlugin<SpotifyConfig> = (config, props) => {
 
 const withSpotifyConfiguration: ConfigPlugin<SpotifyConfig> = (config, props) => {
   return withInfoPlist(config, (config) => {
+    // Construct the redirect URL from scheme and callback
+    const redirectUrl = `${props.scheme}://${props.callback}`
+
     // Add Spotify configuration
     config.modResults.SpotifyClientID = props.clientID;
-    config.modResults.SpotifyScheme = props.scheme;
-    config.modResults.SpotifyCallback = props.callback;
+    config.modResults.SpotifyRedirectURL = redirectUrl;
     config.modResults.SpotifyScopes = props.scopes;
-    config.modResults.tokenRefreshURL = props.tokenRefreshURL;
-    config.modResults.tokenSwapURL = props.tokenSwapURL;
+    config.modResults.SpotifyTokenSwapURL = props.tokenSwapURL;
+    config.modResults.SpotifyTokenRefreshURL = props.tokenRefreshURL;
 
     return config;
   });

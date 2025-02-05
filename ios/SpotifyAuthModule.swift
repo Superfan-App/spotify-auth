@@ -20,13 +20,8 @@ func secureLog(_ message: String, sensitive: Bool = false) {
 #endif
 
 struct AuthorizeConfig: Record {
-    @Field var clientId: String
-    @Field var redirectUrl: String
     @Field var showDialog: Bool = false
     @Field var campaign: String?
-    @Field var tokenSwapURL: String
-    @Field var tokenRefreshURL: String
-    @Field var scopes: [String]
 }
 
 // Define a private enum for mapping Spotify SDK error codes.
@@ -66,19 +61,9 @@ public class SpotifyAuthModule: Module {
         }
 
         AsyncFunction("authorize") { (config: AuthorizeConfig, promise: Promise) in
-            secureLog("Authorization requested with clientId: \(config.clientId)")
-            
-            // Sanitize and validate redirect URL.
-            guard let url = URL(string: config.redirectUrl),
-                  url.scheme != nil,
-                  url.host != nil else {
-                secureLog("Invalid redirect URL format: \(config.redirectUrl)")
-                promise.reject(SpotifyAuthError.invalidConfiguration("Invalid redirect URL format"))
-                return
-            }
+            secureLog("Authorization requested")
             
             do {
-                secureLog("Initializing auth with scopes: \(config.scopes.joined(separator: ","))")
                 try self.spotifyAuth.initAuth(config: config)
                 promise.resolve()
             } catch {

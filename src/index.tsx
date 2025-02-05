@@ -45,6 +45,7 @@ export function SpotifyAuthProvider({
     async (config: AuthorizeConfig): Promise<void> => {
       try {
         console.log('[SpotifyAuth] Starting authorization process in provider');
+        console.log('[SpotifyAuth] Authorization config:', JSON.stringify(config));
         setIsAuthenticating(true);
         setError(null);
         await SpotifyAuthModule.authorize(config);

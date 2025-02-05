@@ -125,77 +125,44 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   
   // MARK: - Configuration Accessors
   
+  private func getInfoPlistValue<T>(_ key: String) throws -> T {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? T else {
+      throw SpotifyAuthError.missingConfiguration("Missing \(key) in Info.plist")
+    }
+    return value
+  }
+  
   private var clientID: String {
     get throws {
-      guard let config = currentConfig else {
-        throw SpotifyAuthError.missingConfiguration("No active configuration")
-      }
-      guard !config.clientId.isEmpty else {
-        throw SpotifyAuthError.missingConfiguration("clientId")
-      }
-      return config.clientId
+      try getInfoPlistValue("SpotifyClientID")
     }
   }
   
   private var redirectURL: URL {
     get throws {
-      guard let config = currentConfig else {
-        throw SpotifyAuthError.missingConfiguration("No active configuration")
-      }
-      guard let url = URL(string: config.redirectUrl),
-            url.scheme != nil,
-            url.host != nil else {
+      let urlString: String = try getInfoPlistValue("SpotifyRedirectURL")
+      guard let url = URL(string: urlString) else {
         throw SpotifyAuthError.invalidConfiguration("Invalid redirect URL format")
       }
       return url
     }
   }
   
-  private var tokenRefreshURL: String {
-    get throws {
-      guard let config = currentConfig else {
-        throw SpotifyAuthError.missingConfiguration("No active configuration")
-      }
-      guard !config.tokenRefreshURL.isEmpty else {
-        throw SpotifyAuthError.missingConfiguration("tokenRefreshURL")
-      }
-      return config.tokenRefreshURL
-    }
-  }
-  
   private var tokenSwapURL: String {
     get throws {
-      guard let config = currentConfig else {
-        throw SpotifyAuthError.missingConfiguration("No active configuration")
-      }
-      guard !config.tokenSwapURL.isEmpty else {
-        throw SpotifyAuthError.missingConfiguration("tokenSwapURL")
-      }
-      return config.tokenSwapURL
+      try getInfoPlistValue("SpotifyTokenSwapURL")
     }
   }
   
-  private var requestedScopes: SPTScope {
+  private var tokenRefreshURL: String {
     get throws {
-      guard let config = currentConfig else {
-        throw SpotifyAuthError.missingConfiguration("No active configuration")
-      }
-      guard !config.scopes.isEmpty else {
-        throw SpotifyAuthError.missingConfiguration("scopes")
-      }
-      
-      var combinedScope: SPTScope = []
-      for scopeString in config.scopes {
-        if let scope = stringToScope(scopeString: scopeString) {
-          combinedScope.insert(scope)
-        }
-      }
-      
-      if combinedScope.isEmpty {
-        throw SpotifyAuthError.invalidConfiguration("No valid scopes provided")
-      }
-      
-      return combinedScope
+      try getInfoPlistValue("SpotifyTokenRefreshURL")
+    }
+  }
+  
+  private var scopes: [String] {
+    get throws {
+      try getInfoPlistValue("SpotifyScopes")
     }
   }
   
@@ -374,44 +341,53 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   
   public func initAuth(config: AuthorizeConfig) {
     do {
-      // Save configuration.
-      self.currentConfig = config
-      
-      guard let sessionManager = self.sessionManager else {
-        throw SpotifyAuthError.sessionError("Session manager not initialized")
-      }
-      let scopes = try self.requestedScopes
-      isAuthenticating = true
-      
-      if sessionManager.isSpotifyAppInstalled {
-        // Use the native app‑switch flow.
-        if config.showDialog {
-          sessionManager.alwaysShowAuthorizationDialog = true
+        guard let sessionManager = self.sessionManager else {
+            throw SpotifyAuthError.sessionError("Session manager not initialized")
         }
-        sessionManager.initiateSession(with: scopes, options: .default, campaign: config.campaign)
-      } else {
-        // Fall back to web‑auth.
-        isUsingWebAuth = true
-        let clientId = try self.clientID
-        let redirectUrl = try self.redirectURL
         
-        let webAuthView = SpotifyOAuthView(appContext: nil)
-        webAuthView.delegate = self
-        self.webAuthView = webAuthView
+        // Get scopes from Info.plist and convert to SPTScope
+        let scopes = try self.scopes.reduce(into: SPTScope()) { result, scopeString in
+            if let scope = stringToScope(scopeString: scopeString) {
+                result.insert(scope)
+            }
+        }
         
-        let scopeStrings = scopes.scopesToStringArray()
+        if scopes.isEmpty {
+            throw SpotifyAuthError.invalidConfiguration("No valid scopes found in configuration")
+        }
         
-        webAuthView.startOAuthFlow(
-          clientId: clientId,
-          redirectUri: redirectUrl.absoluteString,
-          scopes: scopeStrings
-        )
+        isAuthenticating = true
         
-        module?.presentWebAuth(webAuthView)
-      }
+        if sessionManager.isSpotifyAppInstalled {
+            // Use the native app‑switch flow
+            if config.showDialog {
+                sessionManager.alwaysShowAuthorizationDialog = true
+            }
+            sessionManager.initiateSession(with: scopes, options: .default, campaign: config.campaign)
+        } else {
+            // Use web auth as fallback
+            let webView = SpotifyOAuthView(appContext: nil)
+            webView.delegate = self
+            self.webAuthView = webView
+            isUsingWebAuth = true
+            
+            // Get configuration from Info.plist
+            let clientId = try self.clientID
+            let redirectUrl = try self.redirectURL
+            let scopeStrings = try self.scopes
+            
+            webView.startOAuthFlow(
+                clientId: clientId,
+                redirectUri: redirectUrl.absoluteString,
+                scopes: scopeStrings,
+                showDialog: config.showDialog,
+                campaign: config.campaign
+            )
+            
+            module?.presentWebAuth(webView)
+        }
     } catch {
-      isAuthenticating = false
-      handleError(error, context: "authentication")
+        module?.onAuthorizationError(error)
     }
   }
   
@@ -422,7 +398,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
       guard let sessionManager = self.sessionManager else {
         throw SpotifyAuthError.sessionError("Session manager not initialized")
       }
-      let scopes = try self.requestedScopes
+      let scopes = try self.scopes
       isAuthenticating = true
       sessionManager.initiateSession(with: scopes, options: .default, campaign: nil)
     } catch {

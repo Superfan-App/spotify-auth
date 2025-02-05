@@ -21,6 +21,7 @@ export type SpotifyScopes =
   | 'user-read-private'
   | 'user-read-recently-played'
   | 'user-top-read'
+  | 'openid'
 
 /**
  * Configuration options for the Spotify OAuth module.
@@ -53,14 +54,14 @@ export interface SpotifyConfig {
    * Obtain this from your Spotify Developer Dashboard.
    * @see https://developer.spotify.com/dashboard/
    */
-  clientID: string
+  clientID: string;
   
   /**
    * The URL scheme to use for OAuth callbacks.
    * This should be unique to your app and match your Spotify app settings.
    * @example "my-spotify-app"
    */
-  scheme: string
+  scheme: string;
   
   /**
    * The callback path for OAuth redirects.
@@ -68,7 +69,7 @@ export interface SpotifyConfig {
    * Full URI will be: `{scheme}://{callback}`
    * @example "callback"
    */
-  callback: string
+  callback: string;
   
   /**
    * URL for token swap endpoint.
@@ -76,7 +77,7 @@ export interface SpotifyConfig {
    * the code-for-token exchange with Spotify.
    * @example "https://your-backend.com/spotify/swap"
    */
-  tokenSwapURL: string
+  tokenSwapURL: string;
   
   /**
    * URL for token refresh endpoint.
@@ -84,7 +85,7 @@ export interface SpotifyConfig {
    * refreshing expired access tokens.
    * @example "https://your-backend.com/spotify/refresh"
    */
-  tokenRefreshURL: string
+  tokenRefreshURL: string;
   
   /**
    * Array of Spotify authorization scopes.
@@ -92,5 +93,5 @@ export interface SpotifyConfig {
    * @see SpotifyScopes for available options
    * @example ["user-read-email", "streaming"]
    */
-  scopes: SpotifyScopes[]
+  scopes: SpotifyScopes[];
 }
