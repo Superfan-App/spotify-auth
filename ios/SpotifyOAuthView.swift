@@ -65,6 +65,7 @@ class SpotifyOAuthView: ExpoView {
             return
         }
 
+        secureLog("Setting up WebView configuration...")
         // Create a configuration that prevents data persistence
         let config: WKWebViewConfiguration = {
             let configuration = WKWebViewConfiguration()
@@ -76,12 +77,18 @@ class SpotifyOAuthView: ExpoView {
             // Ensure cookies and data are not persisted
             let dataStore = WKWebsiteDataStore.nonPersistent()
             configuration.websiteDataStore = dataStore
+            secureLog("WebView configuration created with non-persistent data store")
             return configuration
         }()
 
         // Initialize webview on main thread with error handling
         do {
             webView = WKWebView(frame: .zero, configuration: config)
+            guard webView != nil else {
+                throw NSError(domain: "SpotifyAuth", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to initialize WebView"])
+            }
+            secureLog("WebView successfully initialized")
+            
             webView.navigationDelegate = self
             webView.allowsBackForwardNavigationGestures = true
             webView.customUserAgent = "SpotifyAuth-iOS/1.0" // Custom UA to identify our app
@@ -123,6 +130,14 @@ class SpotifyOAuthView: ExpoView {
     }
     
     func startOAuthFlow(clientId: String, redirectUri: String, scopes: [String], showDialog: Bool = false, campaign: String? = nil) {
+        // Ensure we're on the main thread - WebView setup must be done on the main thread
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.startOAuthFlow(clientId: clientId, redirectUri: redirectUri, scopes: scopes, showDialog: showDialog, campaign: campaign)
+            }
+            return
+        }
+
         guard !isAuthenticating else { return }
         isAuthenticating = true
         
@@ -138,18 +153,24 @@ class SpotifyOAuthView: ExpoView {
         startAuthTimeout()
         
         // Clear any existing cookies/data to ensure a fresh login
+        // Wait for completion before initiating the auth request
         WKWebsiteDataStore.default().removeData(
             ofTypes: [WKWebsiteDataTypeCookies, WKWebsiteDataTypeSessionStorage],
             modifiedSince: Date(timeIntervalSince1970: 0)
-        ) { }
-        
-        self.initiateAuthRequest(
-            clientId: clientId,
-            redirectUri: redirectUri,
-            scopes: scopes,
-            showDialog: showDialog,
-            campaign: campaign
-        )
+        ) { [weak self] in
+            // Ensure we're still in a valid state after the async operation
+            guard let self = self, self.isAuthenticating else { return }
+            
+            DispatchQueue.main.async {
+                self.initiateAuthRequest(
+                    clientId: clientId,
+                    redirectUri: redirectUri,
+                    scopes: scopes,
+                    showDialog: showDialog,
+                    campaign: campaign
+                )
+            }
+        }
     }
     
     private func startAuthTimeout() {
@@ -185,6 +206,14 @@ class SpotifyOAuthView: ExpoView {
             return
         }
         
+        // Verify webView is properly initialized
+        guard let webView = self.webView else {
+            secureLog("Error: WebView not initialized when attempting to load auth request")
+            isAuthenticating = false
+            delegate?.oauthView(self, didFailWithError: SpotifyOAuthError.authorizationError("WebView not initialized"))
+            return
+        }
+        
         var queryItems = [
             URLQueryItem(name: "client_id", value: clientId),
             URLQueryItem(name: "response_type", value: "code"),
@@ -207,7 +236,22 @@ class SpotifyOAuthView: ExpoView {
         }
         
         let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
-        webView.load(request)
+        secureLog("Initiating auth request to URL: \(url.absoluteString)")
+        
+        DispatchQueue.main.async {
+            guard Thread.isMainThread else {
+                assertionFailure("WebView load not on main thread despite DispatchQueue.main.async")
+                return
+            }
+            
+            if webView.isLoading {
+                secureLog("Warning: WebView is already loading content, stopping previous load")
+                webView.stopLoading()
+            }
+            
+            webView.load(request)
+            self.secureLog("Auth request load initiated")
+        }
     }
     
     deinit {
