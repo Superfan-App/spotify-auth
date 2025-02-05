@@ -83,18 +83,6 @@ public class SpotifyAuthModule: Module {
                     secureLog("View prop updated")
                 }
             }
-            
-            OnViewDidMount { view in
-                DispatchQueue.main.async {
-                    secureLog("OAuth view loaded")
-                }
-            }
-            
-            OnLayout { view in
-                DispatchQueue.main.async {
-                    secureLog("OAuth view layout updated")
-                }
-            }
         }
     }
 
