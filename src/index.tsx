@@ -6,6 +6,7 @@ import {
   SpotifyAuthContext,
   SpotifyAuthContextInstance,
   type AuthorizeConfig,
+  type SpotifyAuthError,
 } from "./SpotifyAuth.types";
 import SpotifyAuthModule from "./SpotifyAuthModule";
 
@@ -37,7 +38,7 @@ export function SpotifyAuthProvider({
 }: SpotifyAuthProviderProps): JSX.Element {
   const [token, setToken] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SpotifyAuthError | null>(null);
 
   const authorize = useCallback(
     async (config: AuthorizeConfig): Promise<void> => {
@@ -46,10 +47,21 @@ export function SpotifyAuthProvider({
         setError(null);
         await SpotifyAuthModule.authorize(config);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Authorization failed");
+        // Handle structured errors from the native layer
+        if (err && typeof err === 'object' && 'type' in err) {
+          setError(err as SpotifyAuthError);
+        } else {
+          // Create a generic error structure for unknown errors
+          setError({
+            type: 'unknown_error',
+            message: err instanceof Error ? err.message : 'Authorization failed',
+            details: {
+              error_code: 'unknown',
+              recoverable: false
+            }
+          });
+        }
         throw err;
-      } finally {
-        setIsAuthenticating(false);
       }
     },
     [],
@@ -58,8 +70,13 @@ export function SpotifyAuthProvider({
   useEffect(() => {
     const subscription = addAuthListener((data) => {
       setToken(data.token);
+      setIsAuthenticating(false);
+
       if (data.error) {
-        console.error(`Spotify auth error: ${data.error}`);
+        console.error('Spotify auth error:', data.error);
+        setError(data.error);
+      } else {
+        setError(null);
       }
     });
     return () => subscription.remove();

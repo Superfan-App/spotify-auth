@@ -89,7 +89,7 @@ enum SpotifyAuthError: Error {
 }
 
 final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthViewDelegate {
-  /// A weak reference to our module’s JS interface.
+  /// A weak reference to our module's JS interface.
   weak var module: SpotifyAuthModule?
   
   /// For web‑auth we present our own OAuth view.
@@ -489,8 +489,8 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   private func exchangeCodeForToken(_ code: String) {
     guard let swapURLString = try? self.tokenSwapURL,
           let url = URL(string: swapURLString) else {
-      handleError(SpotifyAuthError.invalidConfiguration("Invalid token swap URL"), context: "token_exchange")
-      return
+        handleError(SpotifyAuthError.invalidConfiguration("Invalid token swap URL"), context: "token_exchange")
+        return
     }
     
     var request = URLRequest(url: url)
@@ -499,40 +499,67 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     
     let params: [String: String]
     do {
-      params = [
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": try self.redirectURL.absoluteString,
-        "client_id": try self.clientID
-      ]
+        params = [
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": try self.redirectURL.absoluteString,
+            "client_id": try self.clientID
+        ]
     } catch {
-      handleError(error, context: "token_exchange")
-      return
+        handleError(error, context: "token_exchange")
+        return
     }
     
     let bodyString = params.map { "\($0)=\($1)" }.joined(separator: "&")
     request.httpBody = bodyString.data(using: .utf8)
     
     let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-      if let error = error {
-        self?.handleError(error, context: "token_exchange")
-        return
-      }
-      guard let data = data,
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let accessToken = json["access_token"] as? String,
-            let refreshToken = json["refresh_token"] as? String,
-            let expiresIn = json["expires_in"] as? TimeInterval else {
-        self?.handleError(SpotifyAuthError.tokenError("Invalid token response"), context: "token_exchange")
-        return
-      }
-      
-      let expirationDate = Date(timeIntervalSinceNow: expiresIn)
-      let sessionData = SpotifySessionData(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate)
-      DispatchQueue.main.async {
-        self?.currentSession = sessionData
-        self?.module?.onAccessTokenObtained(accessToken)
-      }
+        if let error = error {
+            self?.handleError(SpotifyAuthError.networkError(error.localizedDescription), context: "token_exchange")
+            return
+        }
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            self?.handleError(SpotifyAuthError.networkError("Invalid response type"), context: "token_exchange")
+            return
+        }
+        
+        // Check HTTP status code
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorMessage: String
+            if let data = data, let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errorDescription = errorJson["error_description"] as? String {
+                errorMessage = errorDescription
+            } else {
+                errorMessage = "Server returned status code \(httpResponse.statusCode)"
+            }
+            self?.handleError(SpotifyAuthError.networkError(errorMessage), context: "token_exchange")
+            return
+        }
+        
+        guard let data = data else {
+            self?.handleError(SpotifyAuthError.tokenError("No data received"), context: "token_exchange")
+            return
+        }
+        
+        do {
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            guard let json = json,
+                  let accessToken = json["access_token"] as? String,
+                  let refreshToken = json["refresh_token"] as? String,
+                  let expiresIn = json["expires_in"] as? TimeInterval else {
+                throw SpotifyAuthError.tokenError("Invalid token response format")
+            }
+            
+            let expirationDate = Date(timeIntervalSinceNow: expiresIn)
+            let sessionData = SpotifySessionData(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate)
+            DispatchQueue.main.async {
+                self?.currentSession = sessionData
+                self?.module?.onAccessTokenObtained(accessToken)
+            }
+        } catch {
+            self?.handleError(error, context: "token_exchange")
+        }
     }
     
     task.resume()
@@ -588,18 +615,24 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   }
   
   private func handleError(_ error: Error, context: String) {
-    let spotifyError: SpotifyAuthError = .authenticationFailed(error.localizedDescription)
+    let spotifyError: SpotifyAuthError
+    
+    if let existingSpotifyError = error as? SpotifyAuthError {
+        spotifyError = existingSpotifyError
+    } else {
+        spotifyError = .authenticationFailed(error.localizedDescription)
+    }
     
     secureLog("Error in \(context): \(spotifyError.localizedDescription)")
     
     switch spotifyError.retryStrategy {
     case .none:
-      module?.onAuthorizationError(spotifyError.localizedDescription)
-      cleanupPreviousSession()
+        module?.onAuthorizationError(spotifyError.localizedDescription)
+        cleanupPreviousSession()
     case .retry(let attempts, let delay):
-      handleRetry(error: spotifyError, context: context, remainingAttempts: attempts, delay: delay)
+        handleRetry(error: spotifyError, context: context, remainingAttempts: attempts, delay: delay)
     case .exponentialBackoff(let maxAttempts, let initialDelay):
-      handleExponentialBackoff(error: spotifyError, context: context, remainingAttempts: maxAttempts, currentDelay: initialDelay)
+        handleExponentialBackoff(error: spotifyError, context: context, remainingAttempts: maxAttempts, currentDelay: initialDelay)
     }
   }
   

@@ -146,20 +146,115 @@ public class SpotifyAuthModule: Module {
     }
 
     @objc
-    public func onAuthorizationError(_ errorDescription: String) {
-        let sanitizedError = sanitizeErrorMessage(errorDescription)
-        secureLog("Authorization error: \(sanitizedError)")
+    public func onAuthorizationError(_ error: Error) {
+        let errorData: [String: Any]
+        
+        if let spotifyError = error as? SpotifyAuthError {
+            // Map domain error to a structured format
+            errorData = mapSpotifyError(spotifyError)
+        } else if let sptError = error as? SPTError {
+            // Map Spotify SDK errors
+            errorData = mapSPTError(sptError)
+        } else {
+            // Map unknown errors
+            errorData = [
+                "type": "unknown_error",
+                "message": sanitizeErrorMessage(error.localizedDescription),
+                "details": [
+                    "error_code": "unknown",
+                    "recoverable": false
+                ]
+            ]
+        }
+        
+        secureLog("Authorization error: \(errorData["message"] as? String ?? "Unknown error")")
+        
         let eventData: [String: Any] = [
             "success": false,
-            "token": NSNull(),  // Use NSNull() instead of nil.
-            "error": sanitizedError
+            "token": NSNull(),
+            "error": errorData
         ]
         sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
     }
 
+    private func mapSpotifyError(_ error: SpotifyAuthError) -> [String: Any] {
+        let message = sanitizeErrorMessage(error.localizedDescription)
+        var details: [String: Any] = ["recoverable": error.isRecoverable]
+        
+        let (type, errorCode) = classifySpotifyError(error)
+        details["error_code"] = errorCode
+        
+        // Add retry strategy information if available
+        switch error.retryStrategy {
+        case .retry(let attempts, let delay):
+            details["retry"] = [
+                "type": "fixed",
+                "attempts": attempts,
+                "delay": delay
+            ]
+        case .exponentialBackoff(let maxAttempts, let initialDelay):
+            details["retry"] = [
+                "type": "exponential",
+                "max_attempts": maxAttempts,
+                "initial_delay": initialDelay
+            ]
+        case .none:
+            details["retry"] = nil
+        }
+        
+        return [
+            "type": type,
+            "message": message,
+            "details": details
+        ]
+    }
+
+    private func mapSPTError(_ error: SPTError) -> [String: Any] {
+        let message = sanitizeErrorMessage(error.localizedDescription)
+        let details: [String: Any] = [
+            "error_code": error.code,
+            "recoverable": false
+        ]
+        
+        let type: String
+        switch error.code {
+        case .authorizationFailed:
+            type = "authorization_error"
+        case .renewSessionFailed:
+            type = "token_error"
+        case .jsonFailed:
+            type = "server_error"
+        default:
+            type = "unknown_error"
+        }
+        
+        return [
+            "type": type,
+            "message": message,
+            "details": details
+        ]
+    }
+
+    private func classifySpotifyError(_ error: SpotifyAuthError) -> (type: String, code: String) {
+        switch error {
+        case .missingConfiguration, .invalidConfiguration:
+            return ("configuration_error", "config_invalid")
+        case .authenticationFailed:
+            return ("authorization_error", "auth_failed")
+        case .tokenError:
+            return ("token_error", "token_invalid")
+        case .sessionError:
+            return ("authorization_error", "session_error")
+        case .networkError:
+            return ("network_error", "network_failed")
+        case .recoverable:
+            return ("authorization_error", "recoverable_error")
+        }
+    }
+
     func presentWebAuth(_ webAuthView: SpotifyOAuthView) {
         guard let topViewController = UIApplication.shared.currentKeyWindow?.rootViewController?.topMostViewController() else {
-            onAuthorizationError("Could not present web authentication")
+            onAuthorizationError(SpotifyAuthError.unknownError("Could not present web authentication"))
             return
         }
         

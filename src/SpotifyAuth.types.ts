@@ -6,7 +6,7 @@ import { createContext } from "react";
 export interface SpotifyAuthEvent {
   success: boolean;
   token: string | null;
-  error?: string;
+  error?: SpotifyAuthError;
 }
 
 /**
@@ -17,8 +17,44 @@ export interface SpotifyAuthorizationData {
   success: boolean;
   /** The access token if authorization was successful, null otherwise */
   token: string | null;
-  /** Error message if authorization failed */
-  error?: string;
+  /** Error information if authorization failed */
+  error?: SpotifyAuthError;
+}
+
+/**
+ * Possible error types that can occur during Spotify authentication
+ */
+export type SpotifyAuthError = {
+  /** The type of error that occurred */
+  type: 
+    | "configuration_error"    // Missing or invalid configuration
+    | "network_error"         // Network-related issues
+    | "token_error"          // Issues with token exchange/refresh
+    | "authorization_error"   // User-facing authorization issues
+    | "server_error"         // Backend server issues
+    | "unknown_error";       // Unexpected errors
+  /** Human-readable error message */
+  message: string;
+  /** Additional error details */
+  details: {
+    /** Specific error code for more granular error handling */
+    error_code: string;
+    /** Whether the error can be recovered from */
+    recoverable: boolean;
+    /** Retry strategy information if applicable */
+    retry?: {
+      /** Type of retry strategy */
+      type: "fixed" | "exponential";
+      /** For fixed retry: number of attempts */
+      attempts?: number;
+      /** For fixed retry: delay between attempts in seconds */
+      delay?: number;
+      /** For exponential backoff: maximum number of attempts */
+      max_attempts?: number;
+      /** For exponential backoff: initial delay in seconds */
+      initial_delay?: number;
+    };
+  };
 }
 
 /**
@@ -54,7 +90,7 @@ export interface SpotifyAuthContext {
   /** Whether authorization is in progress */
   isAuthenticating: boolean;
   /** Last error that occurred during authentication */
-  error: string | null;
+  error: SpotifyAuthError | null;
 }
 
 export const SpotifyAuthContextInstance = createContext<SpotifyAuthContext>({
