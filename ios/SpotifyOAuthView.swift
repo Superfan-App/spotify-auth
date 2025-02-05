@@ -41,7 +41,8 @@ class SpotifyOAuthView: ExpoView {
     private var isAuthenticating = false
     private var expectedRedirectScheme: String?
     private var authTimeout: Timer?
-    private static let AUTH_TIMEOUT_INTERVAL: TimeInterval = 300 // 5 minutes
+    private static let authTimeoutInterval: TimeInterval = 300 // 5 minutes
+    private var observerToken: NSKeyValueObservation?
     
     required init(appContext: AppContext? = nil) {
         // Generate a random state string for CSRF protection
@@ -91,14 +92,14 @@ class SpotifyOAuthView: ExpoView {
             activityIndicator.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
         
-        // Start observing loading state
-        webView.addObserver(self, forKeyPath: #keyPath(WKWebView.isLoading), options: .new, context: nil)
-    }
-    
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == #keyPath(WKWebView.isLoading) {
-            if let activityIndicator = subviews.first(where: { $0 is UIActivityIndicatorView }) as? UIActivityIndicatorView {
-                webView.isLoading ? activityIndicator.startAnimating() : activityIndicator.stopAnimating()
+        // Setup modern KVO observation
+        observerToken = webView.observe(\.isLoading, options: [.new]) { [weak self] _, _ in
+            if let activityIndicator = self?.subviews.first(where: { $0 is UIActivityIndicatorView }) as? UIActivityIndicatorView {
+                if self?.webView.isLoading == true {
+                    activityIndicator.startAnimating()
+                } else {
+                    activityIndicator.stopAnimating()
+                }
             }
         }
     }
@@ -122,20 +123,20 @@ class SpotifyOAuthView: ExpoView {
         WKWebsiteDataStore.default().removeData(
             ofTypes: [WKWebsiteDataTypeCookies, WKWebsiteDataTypeSessionStorage],
             modifiedSince: Date(timeIntervalSince1970: 0)
-        ) { [weak self] in
-            self?.initiateAuthRequest(
-                clientId: clientId,
-                redirectUri: redirectUri,
-                scopes: scopes,
-                showDialog: showDialog,
-                campaign: campaign
-            )
-        }
+        ) { }
+        
+        self.initiateAuthRequest(
+            clientId: clientId,
+            redirectUri: redirectUri,
+            scopes: scopes,
+            showDialog: showDialog,
+            campaign: campaign
+        )
     }
     
     private func startAuthTimeout() {
         authTimeout?.invalidate()
-        authTimeout = Timer.scheduledTimer(withTimeInterval: Self.AUTH_TIMEOUT_INTERVAL, repeats: false) { [weak self] _ in
+        authTimeout = Timer.scheduledTimer(withTimeInterval: Self.authTimeoutInterval, repeats: false) { [weak self] _ in
             self?.handleTimeout()
         }
     }
@@ -192,7 +193,7 @@ class SpotifyOAuthView: ExpoView {
     }
     
     deinit {
-        webView.removeObserver(self, forKeyPath: #keyPath(WKWebView.isLoading))
+        observerToken?.invalidate()
         authTimeout?.invalidate()
     }
 }

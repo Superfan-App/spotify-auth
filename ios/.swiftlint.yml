@@ -1,0 +1,27 @@
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - function_body_length
+  - file_length
+  - type_body_length
+
+opt_in_rules:
+  - force_unwrapping
+  - empty_count
+  - empty_string
+
+included:
+  - .
+
+excluded:
+  - Pods
+  - Carthage
+  - vendor
+
+analyzer_rules:
+  - explicit_self
+  - unused_import
+  - unused_declaration
+
+force_cast: warning
+force_try: warning 

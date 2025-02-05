@@ -313,7 +313,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     let bodyString = params.map { "\($0)=\($1)" }.joined(separator: "&")
     request.httpBody = bodyString.data(using: .utf8)
     
-    let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+    let task = URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
       if let error = error {
         self?.handleError(error, context: "token_refresh")
         return
@@ -550,50 +550,29 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   // MARK: - Helpers
   
   private func stringToScope(scopeString: String) -> SPTScope? {
-    switch scopeString {
-    case "playlist-read-private":
-      return .playlistReadPrivate
-    case "playlist-read-collaborative":
-      return .playlistReadCollaborative
-    case "playlist-modify-public":
-      return .playlistModifyPublic
-    case "playlist-modify-private":
-      return .playlistModifyPrivate
-    case "user-follow-read":
-      return .userFollowRead
-    case "user-follow-modify":
-      return .userFollowModify
-    case "user-library-read":
-      return .userLibraryRead
-    case "user-library-modify":
-      return .userLibraryModify
-    case "user-read-birthdate":
-      return .userReadBirthDate
-    case "user-read-email":
-      return .userReadEmail
-    case "user-read-private":
-      return .userReadPrivate
-    case "user-top-read":
-      return .userTopRead
-    case "ugc-image-upload":
-      return .ugcImageUpload
-    case "streaming":
-      return .streaming
-    case "app-remote-control":
-      return .appRemoteControl
-    case "user-read-playback-state":
-      return .userReadPlaybackState
-    case "user-modify-playback-state":
-      return .userModifyPlaybackState
-    case "user-read-currently-playing":
-      return .userReadCurrentlyPlaying
-    case "user-read-recently-played":
-      return .userReadRecentlyPlayed
-    case "openid":
-      return .openid
-    default:
-      return nil
-    }
+    let scopeMapping: [String: SPTScope] = [
+      "playlist-read-private": .playlistReadPrivate,
+      "playlist-read-collaborative": .playlistReadCollaborative,
+      "playlist-modify-public": .playlistModifyPublic,
+      "playlist-modify-private": .playlistModifyPrivate,
+      "user-follow-read": .userFollowRead,
+      "user-follow-modify": .userFollowModify,
+      "user-library-read": .userLibraryRead,
+      "user-library-modify": .userLibraryModify,
+      "user-read-birthdate": .userReadBirthDate,
+      "user-read-email": .userReadEmail,
+      "user-read-private": .userReadPrivate,
+      "user-top-read": .userTopRead,
+      "ugc-image-upload": .ugcImageUpload,
+      "streaming": .streaming,
+      "app-remote-control": .appRemoteControl,
+      "user-read-playback-state": .userReadPlaybackState,
+      "user-modify-playback-state": .userModifyPlaybackState,
+      "user-read-currently-playing": .userReadCurrentlyPlaying,
+      "user-read-recently-played": .userReadRecentlyPlayed,
+      "openid": .openid
+    ]
+    return scopeMapping[scopeString]
   }
   
   private func handleError(_ error: Error, context: String) {
@@ -674,27 +653,29 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
 extension SPTScope {
   /// Converts an SPTScope value into an array of scope strings.
   func scopesToStringArray() -> [String] {
-    var scopes: [String] = []
-    if contains(.playlistReadPrivate) { scopes.append("playlist-read-private") }
-    if contains(.playlistReadCollaborative) { scopes.append("playlist-read-collaborative") }
-    if contains(.playlistModifyPublic) { scopes.append("playlist-modify-public") }
-    if contains(.playlistModifyPrivate) { scopes.append("playlist-modify-private") }
-    if contains(.userFollowRead) { scopes.append("user-follow-read") }
-    if contains(.userFollowModify) { scopes.append("user-follow-modify") }
-    if contains(.userLibraryRead) { scopes.append("user-library-read") }
-    if contains(.userLibraryModify) { scopes.append("user-library-modify") }
-    if contains(.userReadBirthDate) { scopes.append("user-read-birthdate") }
-    if contains(.userReadEmail) { scopes.append("user-read-email") }
-    if contains(.userReadPrivate) { scopes.append("user-read-private") }
-    if contains(.userTopRead) { scopes.append("user-top-read") }
-    if contains(.ugcImageUpload) { scopes.append("ugc-image-upload") }
-    if contains(.streaming) { scopes.append("streaming") }
-    if contains(.appRemoteControl) { scopes.append("app-remote-control") }
-    if contains(.userReadPlaybackState) { scopes.append("user-read-playback-state") }
-    if contains(.userModifyPlaybackState) { scopes.append("user-modify-playback-state") }
-    if contains(.userReadCurrentlyPlaying) { scopes.append("user-read-currently-playing") }
-    if contains(.userReadRecentlyPlayed) { scopes.append("user-read-recently-played") }
-    if contains(.openid) { scopes.append("openid") }
-    return scopes
+    let scopeMapping: [(SPTScope, String)] = [
+      (.playlistReadPrivate, "playlist-read-private"),
+      (.playlistReadCollaborative, "playlist-read-collaborative"),
+      (.playlistModifyPublic, "playlist-modify-public"),
+      (.playlistModifyPrivate, "playlist-modify-private"),
+      (.userFollowRead, "user-follow-read"),
+      (.userFollowModify, "user-follow-modify"),
+      (.userLibraryRead, "user-library-read"),
+      (.userLibraryModify, "user-library-modify"),
+      (.userReadBirthDate, "user-read-birthdate"),
+      (.userReadEmail, "user-read-email"),
+      (.userReadPrivate, "user-read-private"),
+      (.userTopRead, "user-top-read"),
+      (.ugcImageUpload, "ugc-image-upload"),
+      (.streaming, "streaming"),
+      (.appRemoteControl, "app-remote-control"),
+      (.userReadPlaybackState, "user-read-playback-state"),
+      (.userModifyPlaybackState, "user-modify-playback-state"),
+      (.userReadCurrentlyPlaying, "user-read-currently-playing"),
+      (.userReadRecentlyPlayed, "user-read-recently-played"),
+      (.openid, "openid")
+    ]
+    
+    return scopeMapping.filter { contains($0.0) }.map { $0.1 }
   }
 }

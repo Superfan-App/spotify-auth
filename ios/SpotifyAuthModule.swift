@@ -1,7 +1,7 @@
 import ExpoModulesCore
 import SpotifyiOS
 
-let SPOTIFY_AUTHORIZATION_EVENT_NAME = "onSpotifyAuth"
+let spotifyAuthorizationEventName = "onSpotifyAuth"
 
 #if DEBUG
 func secureLog(_ message: String, sensitive: Bool = false) {
@@ -44,11 +44,11 @@ public class SpotifyAuthModule: Module {
         }
 
         Constants([
-            "AuthEventName": SPOTIFY_AUTHORIZATION_EVENT_NAME,
+            "AuthEventName": spotifyAuthorizationEventName
         ])
 
         // Defines event names that the module can send to JavaScript.
-        Events(SPOTIFY_AUTHORIZATION_EVENT_NAME)
+        Events(spotifyAuthorizationEventName)
 
         // Called when JS starts observing the event.
         OnStartObserving {
@@ -114,7 +114,7 @@ public class SpotifyAuthModule: Module {
             "token": token,
             "error": NSNull()  // Use NSNull() instead of nil.
         ]
-        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
+        sendEvent(spotifyAuthorizationEventName, eventData)
     }
 
     @objc
@@ -125,7 +125,7 @@ public class SpotifyAuthModule: Module {
             "token": NSNull(),  // Use NSNull() instead of nil.
             "error": NSNull()   // Use NSNull() instead of nil.
         ]
-        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
+        sendEvent(spotifyAuthorizationEventName, eventData)
     }
 
     @objc
@@ -157,7 +157,7 @@ public class SpotifyAuthModule: Module {
             "token": NSNull(),
             "error": errorData
         ]
-        sendEvent(SPOTIFY_AUTHORIZATION_EVENT_NAME, eventData)
+        sendEvent(spotifyAuthorizationEventName, eventData)
     }
 
     private func mapSpotifyError(_ error: SpotifyAuthError) -> [String: Any] {
