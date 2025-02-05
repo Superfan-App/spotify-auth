@@ -1,9 +1,13 @@
-import { requireNativeModule } from "expo-modules-core";
-import type { AuthorizeConfig } from "./SpotifyAuth.types";
+import { requireNativeModule, NativeModule } from "expo-modules-core";
+import type { AuthorizeConfig, SpotifyAuthEvent } from "./SpotifyAuth.types";
 
-interface SpotifyAuthModule {
+type SpotifyAuthEvents = {
+  onSpotifyAuth(event: SpotifyAuthEvent): void;
+};
+
+export declare class SpotifyAuthModule extends NativeModule<SpotifyAuthEvents> {
   readonly AuthEventName: string;
-  authorize(config: AuthorizeConfig): Promise<void>;
+  readonly authorize: (config: AuthorizeConfig) => Promise<void>;
 }
 
 // This call loads the native module object from the JSI.
