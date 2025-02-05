@@ -367,25 +367,32 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
             sessionManager.initiateSession(with: sptScopes, options: .default, campaign: config.campaign)
         } else {
             // Use web auth as fallback
-            let webView = SpotifyOAuthView(appContext: nil)
-            webView.delegate = self
-            self.webAuthView = webView
-            isUsingWebAuth = true
-            
-            // Get configuration from Info.plist
+            // Get configuration from Info.plist before dispatching to main thread
             let clientId = try self.clientID
             let redirectUrl = try self.redirectURL
             let scopeStrings = try self.scopes
+            let showDialog = config.showDialog
+            let campaign = config.campaign
             
-            webView.startOAuthFlow(
-                clientId: clientId,
-                redirectUri: redirectUrl.absoluteString,
-                scopes: scopeStrings,
-                showDialog: config.showDialog,
-                campaign: config.campaign
-            )
-            
-            module?.presentWebAuth(webView)
+            // Ensure all UI operations happen on main thread
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                
+                let webView = SpotifyOAuthView(appContext: nil)
+                webView.delegate = self
+                self.webAuthView = webView
+                self.isUsingWebAuth = true
+                
+                webView.startOAuthFlow(
+                    clientId: clientId,
+                    redirectUri: redirectUrl.absoluteString,
+                    scopes: scopeStrings,
+                    showDialog: showDialog,
+                    campaign: campaign
+                )
+                
+                self.module?.presentWebAuth(webView)
+            }
         }
     } catch {
         module?.onAuthorizationError(error)

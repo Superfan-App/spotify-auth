@@ -62,6 +62,36 @@ class SpotifyOAuthView: ExpoView {
         fatalError("init(coder:) has not been implemented")
     }
     
+    override func layoutSubviews() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.layoutSubviews()
+            }
+            return
+        }
+        super.layoutSubviews()
+    }
+    
+    override func didMoveToWindow() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.didMoveToWindow()
+            }
+            return
+        }
+        super.didMoveToWindow()
+    }
+    
+    override func didMoveToSuperview() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.didMoveToSuperview()
+            }
+            return
+        }
+        super.didMoveToSuperview()
+    }
+    
     private func setupWebView() {
         // Ensure we're on the main thread for UI setup
         if !Thread.isMainThread {

@@ -76,8 +76,24 @@ public class SpotifyAuthModule: Module {
 
         // Enables the module to be used as a native view.
         View(SpotifyOAuthView.self) {
-            Prop("name") { (_: SpotifyOAuthView, prop: String) in
-                secureLog("View prop updated: \(prop)")
+            Events(spotifyAuthorizationEventName)
+            
+            Prop("name") { (view: SpotifyOAuthView, prop: String) in
+                DispatchQueue.main.async {
+                    secureLog("View prop updated: \(prop)")
+                }
+            }
+            
+            OnViewDidLoad { view in
+                DispatchQueue.main.async {
+                    secureLog("OAuth view loaded")
+                }
+            }
+            
+            OnViewDidLayoutSubviews { view in
+                DispatchQueue.main.async {
+                    secureLog("OAuth view layout updated")
+                }
             }
         }
     }
@@ -236,6 +252,14 @@ public class SpotifyAuthModule: Module {
     }
 
     func presentWebAuth(_ webAuthView: SpotifyOAuthView) {
+        // Ensure we're on the main thread for all UI operations
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.presentWebAuth(webAuthView)
+            }
+            return
+        }
+        
         guard let topViewController = UIApplication.shared.currentKeyWindow?.rootViewController?.topMostViewController() else {
             onAuthorizationError(SpotifyAuthError.sessionError("Could not present web authentication"))
             return
@@ -255,9 +279,7 @@ public class SpotifyAuthModule: Module {
         containerVC.navigationItem.title = "Spotify Login"
         
         // Present the web auth view
-        DispatchQueue.main.async {
-            topViewController.present(navigationController, animated: true, completion: nil)
-        }
+        topViewController.present(navigationController, animated: true, completion: nil)
     }
     
     @objc private func dismissWebAuthWithCancel() {
