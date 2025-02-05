@@ -20,26 +20,21 @@ func secureLog(_ message: String, sensitive: Bool = false) {
 #endif
 
 struct AuthorizeConfig: Record {
-    @Field
-    var clientId: String
-    
-    @Field
-    var redirectUrl: String
-    
-    @Field
-    var showDialog: Bool = false
+    @Field var clientId: String
+    @Field var redirectUrl: String
+    @Field var showDialog: Bool = false
+    @Field var campaign: String?
+    @Field var tokenSwapURL: String
+    @Field var tokenRefreshURL: String
+    @Field var scopes: [String]
+}
 
-    @Field
-    var campaign: String?
-    
-    @Field
-    var tokenSwapURL: String
-    
-    @Field
-    var tokenRefreshURL: String
-    
-    @Field
-    var scopes: [String]
+// Define a private enum for mapping Spotify SDK error codes.
+// (The raw values here are examples; adjust them to match your SDK’s definitions.)
+private enum SPTErrorCode: Int {
+    case authorizationFailed = 100
+    case renewSessionFailed = 101
+    case jsonFailed = 102
 }
 
 public class SpotifyAuthModule: Module {
@@ -82,11 +77,11 @@ public class SpotifyAuthModule: Module {
             }
             
             do {
-                try spotifyAuth.initAuth(config: config)
+                try self.spotifyAuth.initAuth(config: config)
                 promise.resolve()
             } catch {
                 // Sanitize error message.
-                let sanitizedError = sanitizeErrorMessage(error.localizedDescription)
+                let sanitizedError = self.sanitizeErrorMessage(error.localizedDescription)
                 promise.reject(SpotifyAuthError.authenticationFailed(sanitizedError))
             }
         }
@@ -218,11 +213,11 @@ public class SpotifyAuthModule: Module {
         
         let type: String
         switch error.code {
-        case .authorizationFailed:
+        case SPTErrorCode.authorizationFailed.rawValue:
             type = "authorization_error"
-        case .renewSessionFailed:
+        case SPTErrorCode.renewSessionFailed.rawValue:
             type = "token_error"
-        case .jsonFailed:
+        case SPTErrorCode.jsonFailed.rawValue:
             type = "server_error"
         default:
             type = "unknown_error"
@@ -254,7 +249,7 @@ public class SpotifyAuthModule: Module {
 
     func presentWebAuth(_ webAuthView: SpotifyOAuthView) {
         guard let topViewController = UIApplication.shared.currentKeyWindow?.rootViewController?.topMostViewController() else {
-            onAuthorizationError(SpotifyAuthError.unknownError("Could not present web authentication"))
+            onAuthorizationError(SpotifyAuthError.sessionError("Could not present web authentication"))
             return
         }
         

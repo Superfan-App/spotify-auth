@@ -114,7 +114,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   private var isAuthenticating: Bool = false {
     didSet {
       if !isAuthenticating && currentSession == nil {
-        module?.onAuthorizationError("Authentication process ended without session")
+        module?.onAuthorizationError(SpotifyAuthError.sessionError("Authentication process ended without session"))
       }
     }
   }
@@ -234,14 +234,14 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
       try validateAndConfigureURLs(config)
       return config
     } catch {
-      module?.onAuthorizationError(error.localizedDescription)
+      module?.onAuthorizationError(error)
       return nil
     }
   }()
   
   lazy var sessionManager: SPTSessionManager? = {
     guard let configuration = self.configuration else {
-      module?.onAuthorizationError("Failed to create configuration")
+      module?.onAuthorizationError(SpotifyAuthError.sessionError("Failed to create configuration"))
       return nil
     }
     return SPTSessionManager(configuration: configuration, delegate: self)
@@ -474,7 +474,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   }
   
   func oauthViewDidCancel(_ view: SpotifyOAuthView) {
-    module?.onAuthorizationError("User cancelled authentication")
+    module?.onAuthorizationError(SpotifyAuthError.authenticationFailed("User cancelled authentication"))
     cleanupWebAuth()
   }
   
@@ -489,8 +489,8 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   private func exchangeCodeForToken(_ code: String) {
     guard let swapURLString = try? self.tokenSwapURL,
           let url = URL(string: swapURLString) else {
-        handleError(SpotifyAuthError.invalidConfiguration("Invalid token swap URL"), context: "token_exchange")
-        return
+      handleError(SpotifyAuthError.invalidConfiguration("Invalid token swap URL"), context: "token_exchange")
+      return
     }
     
     var request = URLRequest(url: url)
@@ -627,7 +627,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     
     switch spotifyError.retryStrategy {
     case .none:
-        module?.onAuthorizationError(spotifyError.localizedDescription)
+        module?.onAuthorizationError(spotifyError)
         cleanupPreviousSession()
     case .retry(let attempts, let delay):
         handleRetry(error: spotifyError, context: context, remainingAttempts: attempts, delay: delay)
@@ -638,7 +638,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   
   private func handleRetry(error: SpotifyAuthError, context: String, remainingAttempts: Int, delay: TimeInterval) {
     guard remainingAttempts > 0 else {
-      module?.onAuthorizationError("\(error.localizedDescription) (Max retries reached)")
+      module?.onAuthorizationError(SpotifyAuthError.authenticationFailed("\(error.localizedDescription) (Max retries reached)"))
       cleanupPreviousSession()
       return
     }
@@ -659,7 +659,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   
   private func handleExponentialBackoff(error: SpotifyAuthError, context: String, remainingAttempts: Int, currentDelay: TimeInterval) {
     guard remainingAttempts > 0 else {
-      module?.onAuthorizationError("\(error.localizedDescription) (Max retries reached)")
+      module?.onAuthorizationError(SpotifyAuthError.authenticationFailed("\(error.localizedDescription) (Max retries reached)"))
       cleanupPreviousSession()
       return
     }
