@@ -57,50 +57,68 @@ class SpotifyOAuthView: ExpoView {
     }
     
     private func setupWebView() {
+        // Ensure we're on the main thread for UI setup
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.setupWebView()
+            }
+            return
+        }
+
         // Create a configuration that prevents data persistence
-        let config = WKWebViewConfiguration()
-        let prefs = WKWebpagePreferences()
-        prefs.allowsContentJavaScript = true
-        config.defaultWebpagePreferences = prefs
-        
-        // Ensure cookies and data are not persisted
-        let dataStore = WKWebsiteDataStore.nonPersistent()
-        config.websiteDataStore = dataStore
-        
-        webView = WKWebView(frame: .zero, configuration: config)
-        webView.navigationDelegate = self
-        webView.allowsBackForwardNavigationGestures = true
-        webView.customUserAgent = "SpotifyAuth-iOS/1.0" // Custom UA to identify our app
-        
-        // Add loading indicator
-        let activityIndicator = UIActivityIndicatorView(style: .medium)
-        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
-        activityIndicator.hidesWhenStopped = true
-        
-        addSubview(webView)
-        addSubview(activityIndicator)
-        
-        // Setup constraints
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: topAnchor),
-            webView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            webView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        let config: WKWebViewConfiguration = {
+            let configuration = WKWebViewConfiguration()
+            configuration.processPool = WKProcessPool() // Create a new process pool
+            let prefs = WKWebpagePreferences()
+            prefs.allowsContentJavaScript = true
+            configuration.defaultWebpagePreferences = prefs
             
-            activityIndicator.centerXAnchor.constraint(equalTo: centerXAnchor),
-            activityIndicator.centerYAnchor.constraint(equalTo: centerYAnchor)
-        ])
-        
-        // Setup modern KVO observation
-        observerToken = webView.observe(\.isLoading, options: [.new]) { [weak self] _, _ in
-            if let activityIndicator = self?.subviews.first(where: { $0 is UIActivityIndicatorView }) as? UIActivityIndicatorView {
-                if self?.webView.isLoading == true {
-                    activityIndicator.startAnimating()
-                } else {
-                    activityIndicator.stopAnimating()
+            // Ensure cookies and data are not persisted
+            let dataStore = WKWebsiteDataStore.nonPersistent()
+            configuration.websiteDataStore = dataStore
+            return configuration
+        }()
+
+        // Initialize webview on main thread with error handling
+        do {
+            webView = WKWebView(frame: .zero, configuration: config)
+            webView.navigationDelegate = self
+            webView.allowsBackForwardNavigationGestures = true
+            webView.customUserAgent = "SpotifyAuth-iOS/1.0" // Custom UA to identify our app
+            
+            // Add loading indicator
+            let activityIndicator = UIActivityIndicatorView(style: .medium)
+            activityIndicator.translatesAutoresizingMaskIntoConstraints = false
+            activityIndicator.hidesWhenStopped = true
+            
+            addSubview(webView)
+            addSubview(activityIndicator)
+            
+            // Setup constraints
+            webView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                webView.topAnchor.constraint(equalTo: topAnchor),
+                webView.leadingAnchor.constraint(equalTo: leadingAnchor),
+                webView.trailingAnchor.constraint(equalTo: trailingAnchor),
+                webView.bottomAnchor.constraint(equalTo: bottomAnchor),
+                
+                activityIndicator.centerXAnchor.constraint(equalTo: centerXAnchor),
+                activityIndicator.centerYAnchor.constraint(equalTo: centerYAnchor)
+            ])
+            
+            // Setup modern KVO observation
+            observerToken = webView.observe(\.isLoading, options: [.new]) { [weak self] _, _ in
+                if let activityIndicator = self?.subviews.first(where: { $0 is UIActivityIndicatorView }) as? UIActivityIndicatorView {
+                    if self?.webView.isLoading == true {
+                        activityIndicator.startAnimating()
+                    } else {
+                        activityIndicator.stopAnimating()
+                    }
                 }
             }
+        } catch {
+            secureLog("Failed to setup WebView: \(error.localizedDescription)")
+            delegate?.oauthView(self, didFailWithError: SpotifyOAuthError.authorizationError("Failed to initialize web view"))
         }
     }
     
