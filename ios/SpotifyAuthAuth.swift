@@ -639,12 +639,65 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     }
   }
   
-  private func secureLog(_ message: String) {
-    print("[SpotifyAuthAuth] \(message)")
+  // MARK: - Logging
+  
+  private func secureLog(_ message: String, sensitive: Bool = false) {
+    #if DEBUG
+    if sensitive {
+      print("[SpotifyAuth] ********")
+    } else {
+      print("[SpotifyAuth] \(message)")
+    }
+    #else
+    if !sensitive {
+      print("[SpotifyAuth] \(message)")
+    }
+    #endif
   }
   
   deinit {
     cleanupPreviousSession()
+  }
+  
+  // MARK: - URL Handling
+  
+  /// Handle URL callback for UIApplicationDelegate
+  public func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+    // If we're using web auth, let the web view handle it
+    if isUsingWebAuth {
+      return false
+    }
+    
+    // Forward to session manager for app-switch flow
+    if let sessionManager = self.sessionManager {
+      let handled = sessionManager.application(app, open: url, options: options)
+      if handled {
+        secureLog("URL handled by session manager")
+      }
+      return handled
+    }
+    
+    return false
+  }
+  
+  /// Handle URL callback for UISceneDelegate
+  public func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    guard let url = URLContexts.first?.url else {
+      return
+    }
+    
+    // If we're using web auth, let the web view handle it
+    if isUsingWebAuth {
+      return
+    }
+    
+    // Forward to session manager for app-switch flow
+    if let sessionManager = self.sessionManager {
+      let handled = sessionManager.application(UIApplication.shared, open: url, options: [:])
+      if handled {
+        secureLog("URL handled by session manager")
+      }
+    }
   }
 }
 

@@ -30,12 +30,14 @@ Pod::Spec.new do |s|
     'DEFINES_MODULE'            => 'YES',
     'SWIFT_COMPILATION_MODE'    => 'wholemodule',
     'ENABLE_BITCODE'            => 'NO',
-    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
+    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0',
+    'SWIFT_OBJC_BRIDGING_HEADER' => '$(PODS_TARGET_SRCROOT)/SpotifyAuth-Bridging-Header.h'
   }
   
   s.user_target_xcconfig = {
     'ENABLE_BITCODE'            => 'NO',
-    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
+    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0',
+    'OTHER_LDFLAGS'            => '-ObjC'
   }
   
   # Include all Swift files in the same directory as the podspec.
