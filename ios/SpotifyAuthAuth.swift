@@ -279,7 +279,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         }
     }
 
-    public func initAuth(showDialog: Bool = false) {
+    public func initAuth(showDialog: Bool = false, campaign: String? = nil) {
         do {
             guard let sessionManager = self.sessionManager else {
                 throw SpotifyAuthError.sessionError("Session manager not initialized")
@@ -287,9 +287,15 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
             let scopes = try self.requestedScopes
             isAuthenticating = true
             
-            // Updated: Use SPTSessionManagerOptions (an OptionSet) and pass nil for campaign.
-            let options: SPTSessionManagerOptions = showDialog ? .clientOnly : []
-            sessionManager.initiateSession(with: scopes, options: options, campaign: nil)
+            // If showDialog is true, we want to force the authorization dialog
+            // This is different from clientOnly which would force using Spotify app
+            if showDialog {
+                sessionManager.alwaysShowAuthorizationDialog = true
+            }
+            
+            // Use default authorization which will automatically choose the best method
+            // (Spotify app if installed, web view if not)
+            sessionManager.initiateSessionWithScope(scopes, options: .default, campaign: campaign)
         } catch {
             isAuthenticating = false
             handleError(error, context: "authentication")
@@ -305,8 +311,8 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
             }
             let scopes = try self.requestedScopes
             isAuthenticating = true
-            // Updated: Use SPTSessionManagerOptions and pass nil for campaign.
-            sessionManager.initiateSession(with: scopes, options: [], campaign: nil)
+            // Updated: Use .default instead of empty array cast
+            sessionManager.initiateSessionWithScope(scopes, options: .default, campaign: nil)
         } catch {
             isAuthenticating = false
             handleError(error, context: "authentication_retry")
@@ -385,7 +391,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         let spotifyError: SpotifyAuthError
         
         // Instead of switching on SPTError cases (which are no longer available),
-        // we simply wrap the error’s description.
+        // we simply wrap the error's description.
         if error is SPTError {
             spotifyError = .authenticationFailed(error.localizedDescription)
         } else {

@@ -31,6 +31,8 @@ export interface AuthorizeConfig {
   redirectUrl: string;
   /** Whether to show the auth dialog */
   showDialog?: boolean;
+  /** Campaign identifier for attribution */
+  campaign?: string;
 }
 
 /**

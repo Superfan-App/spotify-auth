@@ -28,6 +28,9 @@ struct AuthorizeConfig: Record {
     
     @Field
     var showDialog: Bool = false
+
+    @Field
+    var campaign: String?
 }
 
 public class SpotifyAuthModule: Module {
@@ -73,7 +76,7 @@ public class SpotifyAuthModule: Module {
             let _ = SPTConfiguration(clientID: config.clientId, redirectURL: url)
             
             do {
-                try spotifyAuth.initAuth(showDialog: config.showDialog)
+                try spotifyAuth.initAuth(showDialog: config.showDialog, campaign: config.campaign)
                 promise.resolve()
             } catch {
                 // Sanitize error message.
