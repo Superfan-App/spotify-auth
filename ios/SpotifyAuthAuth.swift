@@ -7,15 +7,17 @@ struct SpotifySessionData {
   let accessToken: String
   let refreshToken: String
   let expirationDate: Date
+  let scope: String?
   
   var isExpired: Bool {
     return Date() >= expirationDate
   }
   
-  init(accessToken: String, refreshToken: String, expirationDate: Date) {
+  init(accessToken: String, refreshToken: String, expirationDate: Date, scope: String?) {
     self.accessToken = accessToken
     self.refreshToken = refreshToken
     self.expirationDate = expirationDate
+    self.scope = scope
   }
   
   /// Initialize from an SPTSession (from app‑switch flow)
@@ -24,6 +26,7 @@ struct SpotifySessionData {
     self.accessToken = session.accessToken
     self.refreshToken = session.refreshToken
     self.expirationDate = session.expirationDate
+    self.scope = session.scope?.scopesToStringArray().joined(separator: " ")
   }
 }
 
@@ -238,7 +241,8 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
   
   private func securelyStoreToken(_ session: SpotifySessionData) {
     // Pass token back to JS.
-    module?.onAccessTokenObtained(session.accessToken)
+    let expiresIn = session.expirationDate.timeIntervalSinceNow
+    module?.onAccessTokenObtained(session.accessToken, refreshToken: session.refreshToken, expiresIn: expiresIn, scope: session.scope, tokenType: "Bearer")
     
     let refreshToken = session.refreshToken
     if !refreshToken.isEmpty {
@@ -298,40 +302,74 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     request.httpMethod = "POST"
     request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
     
-    let params: [String: String]
-    do {
-      params = [
-        "grant_type": "refresh_token",
-        "refresh_token": currentSession.refreshToken,
-        "client_id": try self.clientID
-      ]
-    } catch {
-      handleError(error, context: "token_refresh")
-      return
-    }
-    
+    let params = ["refresh_token": currentSession.refreshToken]
     let bodyString = params.map { "\($0)=\($1)" }.joined(separator: "&")
     request.httpBody = bodyString.data(using: .utf8)
     
-    let task = URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+    let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
       if let error = error {
-        self?.handleError(error, context: "token_refresh")
-        return
-      }
-      guard let data = data,
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let accessToken = json["access_token"] as? String,
-            let expiresIn = json["expires_in"] as? TimeInterval else {
-        self?.handleError(SpotifyAuthError.tokenError("Invalid token refresh response"), context: "token_refresh")
+        self?.handleError(SpotifyAuthError.networkError(error.localizedDescription), context: "token_refresh")
         return
       }
       
-      let newRefreshToken = (json["refresh_token"] as? String) ?? currentSession.refreshToken
-      let expirationDate = Date(timeIntervalSinceNow: expiresIn)
-      let newSession = SpotifySessionData(accessToken: accessToken, refreshToken: newRefreshToken, expirationDate: expirationDate)
-      DispatchQueue.main.async {
-        self?.currentSession = newSession
-        self?.module?.onAccessTokenObtained(accessToken)
+      guard let httpResponse = response as? HTTPURLResponse else {
+        self?.handleError(SpotifyAuthError.networkError("Invalid response type"), context: "token_refresh")
+        return
+      }
+      
+      // Check HTTP status code
+      guard (200...299).contains(httpResponse.statusCode) else {
+        let errorMessage: String
+        if let data = data, let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let errorDescription = errorJson["error_description"] as? String {
+          errorMessage = errorDescription
+        } else {
+          errorMessage = "Server returned status code \(httpResponse.statusCode)"
+        }
+        self?.handleError(SpotifyAuthError.networkError(errorMessage), context: "token_refresh")
+        return
+      }
+      
+      guard let data = data else {
+        self?.handleError(SpotifyAuthError.tokenError("No data received"), context: "token_refresh")
+        return
+      }
+      
+      do {
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let json = json else {
+          throw SpotifyAuthError.tokenError("Invalid JSON response")
+        }
+        
+        // Extract and validate required fields
+        guard let accessToken = json["access_token"] as? String else {
+          throw SpotifyAuthError.tokenError("Missing access_token in response")
+        }
+        
+        guard let expiresInString = json["expires_in"] as? String,
+              let expiresIn = TimeInterval(expiresInString) else {
+          throw SpotifyAuthError.tokenError("Invalid or missing expires_in in response")
+        }
+        
+        guard let tokenType = json["token_type"] as? String,
+              tokenType.lowercased() == "bearer" else {
+          throw SpotifyAuthError.tokenError("Invalid or missing token_type in response")
+        }
+        
+        // Optional field
+        let scope = json["scope"] as? String
+        
+        // Keep the existing refresh token since server doesn't send a new one
+        let refreshToken = currentSession.refreshToken
+        let expirationDate = Date(timeIntervalSinceNow: expiresIn)
+        let newSession = SpotifySessionData(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: scope)
+        
+        DispatchQueue.main.async {
+          self?.currentSession = newSession
+          self?.module?.onAccessTokenObtained(accessToken, refreshToken: refreshToken, expiresIn: expiresIn, scope: scope, tokenType: tokenType)
+        }
+      } catch {
+        self?.handleError(error, context: "token_refresh")
       }
     }
     task.resume()
@@ -489,10 +527,8 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     let params: [String: String]
     do {
         params = [
-            "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": try self.redirectURL.absoluteString,
-            "client_id": try self.clientID
+            "redirect_uri": try self.redirectURL.absoluteString
         ]
     } catch {
         handleError(error, context: "token_exchange")
@@ -533,18 +569,37 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
         
         do {
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            guard let json = json,
-                  let accessToken = json["access_token"] as? String,
-                  let refreshToken = json["refresh_token"] as? String,
-                  let expiresIn = json["expires_in"] as? TimeInterval else {
-                throw SpotifyAuthError.tokenError("Invalid token response format")
+            guard let json = json else {
+                throw SpotifyAuthError.tokenError("Invalid JSON response")
             }
             
+            // Extract and validate required fields
+            guard let accessToken = json["access_token"] as? String else {
+                throw SpotifyAuthError.tokenError("Missing access_token in response")
+            }
+            
+            guard let refreshToken = json["refresh_token"] as? String else {
+                throw SpotifyAuthError.tokenError("Missing refresh_token in response")
+            }
+            
+            guard let expiresInString = json["expires_in"] as? String,
+                  let expiresIn = TimeInterval(expiresInString) else {
+                throw SpotifyAuthError.tokenError("Invalid or missing expires_in in response")
+            }
+            
+            guard let tokenType = json["token_type"] as? String,
+                  tokenType.lowercased() == "bearer" else {
+                throw SpotifyAuthError.tokenError("Invalid or missing token_type in response")
+            }
+            
+            // Optional field
+            let scope = json["scope"] as? String
+            
             let expirationDate = Date(timeIntervalSinceNow: expiresIn)
-            let sessionData = SpotifySessionData(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate)
+            let sessionData = SpotifySessionData(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: scope)
             DispatchQueue.main.async {
                 self?.currentSession = sessionData
-                self?.module?.onAccessTokenObtained(accessToken)
+                self?.module?.onAccessTokenObtained(accessToken, refreshToken: refreshToken, expiresIn: expiresIn, scope: scope, tokenType: tokenType)
             }
         } catch {
             self?.handleError(error, context: "token_exchange")

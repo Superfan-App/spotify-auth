@@ -26,10 +26,11 @@ struct AuthorizeConfig: Record {
 
 // Define a private enum for mapping Spotify SDK error codes.
 // (The raw values here are examples; adjust them to match your SDK's definitions.)
-private enum SPTErrorCode: Int {
-    case authorizationFailed = 100
-    case renewSessionFailed = 101
-    case jsonFailed = 102
+private enum SPTErrorCode: UInt {
+    case unknown = 0
+    case authorizationFailed = 1
+    case renewSessionFailed = 2
+    case jsonFailed = 3
 }
 
 public class SpotifyAuthModule: Module {
@@ -78,7 +79,7 @@ public class SpotifyAuthModule: Module {
         View(SpotifyOAuthView.self) {
             Events(spotifyAuthorizationEventName)
             
-            Prop("name") { (view: SpotifyOAuthView, _: String) in
+            Prop("name") { (_: SpotifyOAuthView, _: String) in
                 DispatchQueue.main.async {
                     secureLog("View prop updated")
                 }
@@ -87,14 +88,13 @@ public class SpotifyAuthModule: Module {
     }
 
     private func sanitizeErrorMessage(_ message: String) -> String {
-        // Remove potential sensitive data from error messages.
+        // Only redact actual sensitive values, not general terms
         let sensitivePatterns = [
-            "(?i)client[_-]?id",
-            "(?i)token",
-            "(?i)secret",
-            "(?i)key",
-            "(?i)auth",
-            "(?i)password"
+            "(?i)client[_-]?id=[^&\\s]+",
+            "(?i)access_token=[^&\\s]+",
+            "(?i)refresh_token=[^&\\s]+",
+            "(?i)secret=[^&\\s]+",
+            "(?i)api[_-]?key=[^&\\s]+"
         ]
         
         var sanitized = message
@@ -103,7 +103,7 @@ public class SpotifyAuthModule: Module {
                 sanitized = regex.stringByReplacingMatches(
                     in: sanitized,
                     range: NSRange(sanitized.startIndex..., in: sanitized),
-                    withTemplate: "[REDACTED]"
+                    withTemplate: "$1[REDACTED]"
                 )
             }
         }
@@ -111,11 +111,15 @@ public class SpotifyAuthModule: Module {
     }
 
     @objc
-    public func onAccessTokenObtained(_ token: String) {
+    public func onAccessTokenObtained(_ token: String, refreshToken: String, expiresIn: TimeInterval, scope: String?, tokenType: String) {
         secureLog("Access token obtained", sensitive: true)
         let eventData: [String: Any] = [
             "success": true,
             "token": token,
+            "refreshToken": refreshToken,
+            "expiresIn": expiresIn,
+            "tokenType": tokenType,
+            "scope": scope as Any,
             "error": NSNull()  // Use NSNull() instead of nil.
         ]
         sendEvent(spotifyAuthorizationEventName, eventData)
@@ -126,30 +130,42 @@ public class SpotifyAuthModule: Module {
         secureLog("User signed out")
         let eventData: [String: Any] = [
             "success": true,
-            "token": NSNull(),  // Use NSNull() instead of nil.
-            "error": NSNull()   // Use NSNull() instead of nil.
+            "token": NSNull(),
+            "refreshToken": NSNull(),
+            "expiresIn": NSNull(),
+            "tokenType": NSNull(),
+            "scope": NSNull(),
+            "error": NSNull()
         ]
         sendEvent(spotifyAuthorizationEventName, eventData)
     }
 
     @objc
     public func onAuthorizationError(_ error: Error) {
+        // Skip sending error events for expected state transitions
+        if let spotifyError = error as? SpotifyAuthError,
+           case .sessionError(let message) = spotifyError,
+           message.contains("authentication process") || 
+           message.contains("token exchange") {
+            // This is likely a state transition, not an error
+            secureLog("Auth state transition: \(message)")
+            return
+        }
+        
         let errorData: [String: Any]
         
         if let spotifyError = error as? SpotifyAuthError {
-            // Map domain error to a structured format
             errorData = mapSpotifyError(spotifyError)
         } else if let sptError = error as? SPTError {
-            // Map Spotify SDK errors
             errorData = mapSPTError(sptError)
         } else {
-            // Map unknown errors
             errorData = [
                 "type": "unknown_error",
                 "message": sanitizeErrorMessage(error.localizedDescription),
                 "details": [
                     "error_code": "unknown",
-                    "recoverable": false
+                    "recoverable": false,
+                    "error_type": String(describing: type(of: error))
                 ]
             ]
         }
@@ -159,6 +175,10 @@ public class SpotifyAuthModule: Module {
         let eventData: [String: Any] = [
             "success": false,
             "token": NSNull(),
+            "refreshToken": NSNull(),
+            "expiresIn": NSNull(),
+            "tokenType": NSNull(),
+            "scope": NSNull(),
             "error": errorData
         ]
         sendEvent(spotifyAuthorizationEventName, eventData)
@@ -198,21 +218,30 @@ public class SpotifyAuthModule: Module {
 
     private func mapSPTError(_ error: SPTError) -> [String: Any] {
         let message = sanitizeErrorMessage(error.localizedDescription)
-        let details: [String: Any] = [
+        var details: [String: Any] = [
             "error_code": error.code,
             "recoverable": false
         ]
         
+        // Add underlying error info if available
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? Error {
+            details["underlying_error"] = underlying.localizedDescription
+        }
+        
         let type: String
-        switch error.code {
-        case SPTErrorCode.authorizationFailed.rawValue:
+        switch SPTErrorCode(rawValue: UInt(error.code)) {
+        case .authorizationFailed:
             type = "authorization_error"
-        case SPTErrorCode.renewSessionFailed.rawValue:
-            type = "token_error"
-        case SPTErrorCode.jsonFailed.rawValue:
+            details["recoverable"] = true  // Auth failures are usually recoverable
+        case .renewSessionFailed:
+            type = "session_error"  // Changed from token_error to be more specific
+            details["recoverable"] = true
+        case .jsonFailed:
             type = "server_error"
-        default:
+            details["recoverable"] = false
+        case .unknown, .none:
             type = "unknown_error"
+            details["recoverable"] = false
         }
         
         return [
@@ -231,11 +260,16 @@ public class SpotifyAuthModule: Module {
         case .tokenError:
             return ("token_error", "token_invalid")
         case .sessionError:
-            return ("authorization_error", "session_error")
+            return ("session_error", "session_error")  // Changed from authorization_error
         case .networkError:
             return ("network_error", "network_failed")
-        case .recoverable:
-            return ("authorization_error", "recoverable_error")
+        case .recoverable(let baseError, _):
+            // Use the base error type but mark as recoverable in the details
+            if let spotifyError = baseError as? SpotifyAuthError {
+                let (type, code) = classifySpotifyError(spotifyError)
+                return (type, "recoverable_\(code)")
+            }
+            return ("recoverable_error", "recoverable_unknown")
         }
     }
 

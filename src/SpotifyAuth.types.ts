@@ -31,6 +31,10 @@ export type SpotifyScopes =
 export interface SpotifyAuthEvent {
   success: boolean;
   token: string | null;
+  refreshToken: string | null;
+  expiresIn: number | null;
+  tokenType: string | null;
+  scope: string | null;
   error?: SpotifyAuthError;
 }
 
@@ -42,6 +46,14 @@ export interface SpotifyAuthorizationData {
   success: boolean;
   /** The access token if authorization was successful, null otherwise */
   token: string | null;
+  /** The refresh token if authorization was successful, null otherwise */
+  refreshToken: string | null;
+  /** The token expiration time in seconds if authorization was successful, null otherwise */
+  expiresIn: number | null;
+  /** The token type (e.g. "Bearer") if authorization was successful, null otherwise */
+  tokenType: string | null;
+  /** The granted scopes if authorization was successful, null otherwise */
+  scope: string | null;
   /** Error information if authorization failed */
   error?: SpotifyAuthError;
 }
@@ -102,11 +114,27 @@ export interface SpotifyAuthViewProps {
 }
 
 /**
+ * Spotify authentication state containing all token-related information
+ */
+export interface SpotifyAuthState {
+  /** The current Spotify access token, null if not authenticated */
+  accessToken: string | null;
+  /** The current refresh token, null if not authenticated */
+  refreshToken: string | null;
+  /** The token expiration time in seconds, null if not authenticated */
+  expiresIn: number | null;
+  /** The token type, null if not authenticated */
+  tokenType: string | null;
+  /** The token scope, null if not authenticated */
+  scope: string | null;
+}
+
+/**
  * Context for Spotify authentication state and actions
  */
 export interface SpotifyAuthContext {
-  /** The current Spotify access token, null if not authenticated */
-  accessToken: string | null;
+  /** The complete Spotify authentication state */
+  authState: SpotifyAuthState;
   /** Function to initiate Spotify authorization */
   authorize: (config: AuthorizeConfig) => Promise<void>;
   /** Whether authorization is in progress */
@@ -116,7 +144,13 @@ export interface SpotifyAuthContext {
 }
 
 export const SpotifyAuthContextInstance = createContext<SpotifyAuthContext>({
-  accessToken: null,
+  authState: {
+    accessToken: null,
+    refreshToken: null,
+    expiresIn: null,
+    tokenType: null,
+    scope: null,
+  },
   authorize: async () => {},
   isAuthenticating: false,
   error: null,

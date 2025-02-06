@@ -5,6 +5,7 @@ import {
   SpotifyAuthorizationData,
   SpotifyAuthContext,
   SpotifyAuthContextInstance,
+  SpotifyAuthState,
   type AuthorizeConfig,
   type SpotifyAuthError,
 } from "./SpotifyAuth.types";
@@ -37,7 +38,13 @@ interface SpotifyAuthProviderProps {
 export function SpotifyAuthProvider({
   children,
 }: SpotifyAuthProviderProps): JSX.Element {
-  const [token, setToken] = useState<string | null>(null);
+  const [authState, setAuthState] = useState<SpotifyAuthState>({
+    accessToken: null,
+    refreshToken: null,
+    expiresIn: null,
+    tokenType: null,
+    scope: null,
+  });
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState<SpotifyAuthError | null>(null);
 
@@ -74,16 +81,33 @@ export function SpotifyAuthProvider({
   useEffect(() => {
     console.log('[SpotifyAuth] Setting up auth listener');
     const subscription = addAuthListener((data) => {
-      console.log('[SpotifyAuth] Received auth event:', data.token ? 'Token received' : 'No token');
-      setToken(data.token);
-      setIsAuthenticating(false);
+      console.log('[SpotifyAuth] Received auth event:', JSON.stringify(data));
 
-      if (data.error) {
-        console.error('[SpotifyAuth] Auth event error:', data.error);
-        console.error('Spotify auth error:', data.error);
-        setError(data.error);
-      } else {
+      // Only update state if we receive a token
+      if (data.token) {
+        setAuthState({
+          accessToken: data.token,
+          refreshToken: data.refreshToken,
+          expiresIn: data.expiresIn,
+          tokenType: data.tokenType,
+          scope: data.scope,
+        });
+        setIsAuthenticating(false);
         setError(null);
+      }
+
+      // Only set error if we have no token and there's an error
+      if (!data.token && data.error) {
+        console.error('[SpotifyAuth] Auth event error:', data.error);
+        setAuthState({
+          accessToken: null,
+          refreshToken: null,
+          expiresIn: null,
+          tokenType: null,
+          scope: null,
+        });
+        setError(data.error);
+        setIsAuthenticating(false);
       }
     });
     return () => subscription.remove();
@@ -91,7 +115,12 @@ export function SpotifyAuthProvider({
 
   return (
     <SpotifyAuthContextInstance.Provider
-      value={{ accessToken: token, authorize, isAuthenticating, error }}
+      value={{
+        authState,
+        authorize,
+        isAuthenticating,
+        error
+      }}
     >
       {children}
     </SpotifyAuthContextInstance.Provider>
