@@ -91,12 +91,12 @@ enum SpotifyAuthError: Error {
   }
 }
 
-final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthViewDelegate {
+final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
   /// A weak reference to our module's JS interface.
   weak var module: SpotifyAuthModule?
   
-  /// For web‑auth we present our own OAuth view.
-  private var webAuthView: SpotifyOAuthView?
+  /// For web‑auth we use ASWebAuthenticationSession
+  private var webAuthSession: SpotifyASWebAuthSession?
   private var isUsingWebAuth = false
   
   /// Stores the active configuration from JS.
@@ -416,20 +416,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 
-                let webView = SpotifyOAuthView(appContext: nil)
-                webView.delegate = self
-                self.webAuthView = webView
-                self.isUsingWebAuth = true
-                
-                webView.startOAuthFlow(
-                    clientId: clientId,
-                    redirectUri: redirectUrl.absoluteString,
-                    scopes: scopeStrings,
-                    showDialog: showDialog,
-                    campaign: campaign
-                )
-                
-                self.module?.presentWebAuth(webView)
+                self.initWebAuth(clientId: clientId, redirectUrl: redirectUrl, scopes: scopeStrings, showDialog: showDialog, campaign: campaign)
             }
         }
     } catch {
@@ -487,29 +474,19 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     module?.onSignOut()
   }
   
-  // MARK: - SpotifyOAuthViewDelegate
+  // MARK: - Web Auth Cancellation
   
-  func oauthView(_ view: SpotifyOAuthView, didReceiveCode code: String) {
-    // Exchange the code for tokens using tokenSwapURL.
-    exchangeCodeForToken(code)
-    cleanupWebAuth()
-  }
-  
-  func oauthView(_ view: SpotifyOAuthView, didFailWithError error: Error) {
-    handleError(error, context: "web_authentication")
-    cleanupWebAuth()
-  }
-  
-  func oauthViewDidCancel(_ view: SpotifyOAuthView) {
-    module?.onAuthorizationError(SpotifyAuthError.authenticationFailed("User cancelled authentication"))
+  func cancelWebAuth() {
+    webAuthSession?.cancel()
+    module?.onAuthorizationError(SpotifyAuthError.userCancelled)
     cleanupWebAuth()
   }
   
   private func cleanupWebAuth() {
     isUsingWebAuth = false
-    webAuthView = nil
+    webAuthSession?.cancel()
+    webAuthSession = nil
     currentConfig = nil
-    module?.dismissWebAuth()
   }
   
   /// Exchange an authorization code for tokens.
@@ -607,16 +584,6 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
     }
     
     task.resume()
-  }
-  
-  // MARK: - Web Auth Cancellation
-  
-  func webAuthViewDidCancel() {
-    guard let webView = webAuthView else {
-      module?.onAuthorizationError(SpotifyAuthError.sessionError("Web auth view not found"))
-      return
-    }
-    oauthViewDidCancel(webView)
   }
   
   // MARK: - Helpers
@@ -769,6 +736,75 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate, SpotifyOAuthVi
       if handled {
         secureLog("URL handled by session manager")
       }
+    }
+  }
+  
+  private func initWebAuth(clientId: String, redirectUrl: URL, scopes: [String], showDialog: Bool, campaign: String?) {
+    guard var urlComponents = URLComponents(string: "https://accounts.spotify.com/authorize") else {
+      module?.onAuthorizationError(SpotifyAuthError.invalidRedirectURL)
+      return
+    }
+    
+    // Generate state for CSRF protection
+    let state = UUID().uuidString
+    
+    var queryItems = [
+      URLQueryItem(name: "client_id", value: clientId),
+      URLQueryItem(name: "response_type", value: "code"),
+      URLQueryItem(name: "redirect_uri", value: redirectUrl.absoluteString),
+      URLQueryItem(name: "state", value: state),
+      URLQueryItem(name: "scope", value: scopes.joined(separator: " ")),
+      URLQueryItem(name: "show_dialog", value: showDialog ? "true" : "false")
+    ]
+    
+    if let campaign = campaign {
+      queryItems.append(URLQueryItem(name: "campaign", value: campaign))
+    }
+    
+    urlComponents.queryItems = queryItems
+    
+    guard let authUrl = urlComponents.url else {
+      module?.onAuthorizationError(SpotifyAuthError.invalidRedirectURL)
+      return
+    }
+    
+    // Create and start web auth session
+    webAuthSession = SpotifyASWebAuthSession()
+    webAuthSession?.startAuthFlow(
+      authUrl: authUrl,
+      redirectScheme: redirectUrl.scheme,
+      preferEphemeral: true
+    ) { [weak self] result in
+      switch result {
+      case .success(let callbackURL):
+        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: true),
+              let queryItems = components.queryItems else {
+          self?.module?.onAuthorizationError(SpotifyAuthError.invalidRedirectURL)
+          return
+        }
+        
+        // Verify state parameter to prevent CSRF attacks
+        guard let returnedState = queryItems.first(where: { $0.name == "state" })?.value,
+              returnedState == state else {
+          self?.module?.onAuthorizationError(SpotifyAuthError.stateMismatch)
+          return
+        }
+        
+        if let error = queryItems.first(where: { $0.name == "error" })?.value {
+          if error == "access_denied" {
+            self?.module?.onAuthorizationError(SpotifyAuthError.userCancelled)
+          } else {
+            self?.module?.onAuthorizationError(SpotifyAuthError.authorizationError(error))
+          }
+        } else if let code = queryItems.first(where: { $0.name == "code" })?.value {
+          self?.exchangeCodeForToken(code)
+        }
+        
+      case .failure(let error):
+        self?.module?.onAuthorizationError(error)
+      }
+      
+      self?.cleanupWebAuth()
     }
   }
 }
