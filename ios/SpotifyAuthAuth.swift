@@ -26,7 +26,7 @@ struct SpotifySessionData {
     self.accessToken = session.accessToken
     self.refreshToken = session.refreshToken
     self.expirationDate = session.expirationDate
-    self.scope = session.scope?.scopesToStringArray().joined(separator: " ")
+    self.scope = session.scope.scopesToStringArray().joined(separator: " ")
   }
 }
 
