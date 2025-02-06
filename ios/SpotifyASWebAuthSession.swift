@@ -20,7 +20,7 @@ final class SpotifyASWebAuthSession {
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
         guard !isAuthenticating else {
-            completion(.failure(SpotifyOAuthError.authorizationError("Authentication already in progress")))
+            completion(.failure(SpotifyAuthError.authorizationError("Authentication already in progress")))
             return
         }
         
@@ -35,15 +35,15 @@ final class SpotifyASWebAuthSession {
             
             if let error = error {
                 if (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
-                    completion(.failure(SpotifyOAuthError.userCancelled))
+                    completion(.failure(SpotifyAuthError.userCancelled))
                 } else {
-                    completion(.failure(SpotifyOAuthError.networkError(error)))
+                    completion(.failure(SpotifyAuthError.networkError(error.localizedDescription)))
                 }
                 return
             }
             
             guard let callbackURL = callbackURL else {
-                completion(.failure(SpotifyOAuthError.authorizationError("No callback URL received")))
+                completion(.failure(SpotifyAuthError.authorizationError("No callback URL received")))
                 return
             }
             
@@ -64,7 +64,7 @@ final class SpotifyASWebAuthSession {
                   let authSession = self.authSession,
                   authSession.start() else {
                 self?.isAuthenticating = false
-                completion(.failure(SpotifyOAuthError.authorizationError("Failed to start auth session")))
+                completion(.failure(SpotifyAuthError.authorizationError("Failed to start auth session")))
                 return
             }
             self.secureLog("Auth session started successfully")

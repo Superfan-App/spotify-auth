@@ -38,6 +38,9 @@ enum SpotifyAuthError: Error {
   case sessionError(String)
   case networkError(String)
   case recoverable(String, RetryStrategy)
+  case userCancelled
+  case authorizationError(String)
+  case invalidRedirectURL
   
   enum RetryStrategy {
     case none
@@ -74,6 +77,12 @@ enum SpotifyAuthError: Error {
       return "Network error: \(reason). Please check your internet connection."
     case .recoverable(let message, _):
       return message
+    case .userCancelled:
+      return "User cancelled the authentication process."
+    case .authorizationError(let reason):
+      return "Authorization error: \(reason). Please try logging in again."
+    case .invalidRedirectURL:
+      return "Invalid redirect URL. Please check your app.json configuration."
     }
   }
   
