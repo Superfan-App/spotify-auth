@@ -254,7 +254,7 @@ public class SpotifyAuthModule: Module {
         case .tokenError:
             return ("token_error", "token_invalid")
         case .sessionError:
-            return ("session_error", "session_error")  // Changed from authorization_error
+            return ("session_error", "session_error")
         case .networkError:
             return ("network_error", "network_failed")
         case .recoverable(let baseError, _):
@@ -264,6 +264,14 @@ public class SpotifyAuthModule: Module {
                 return (type, "recoverable_\(code)")
             }
             return ("recoverable_error", "recoverable_unknown")
+        case .userCancelled:
+            return ("authorization_error", "user_cancelled")
+        case .authorizationError:
+            return ("authorization_error", "auth_error")
+        case .invalidRedirectURL:
+            return ("configuration_error", "invalid_redirect_url")
+        case .stateMismatch:
+            return ("authorization_error", "state_mismatch")
         }
     }
 }

@@ -41,6 +41,7 @@ enum SpotifyAuthError: Error {
   case userCancelled
   case authorizationError(String)
   case invalidRedirectURL
+  case stateMismatch
   
   enum RetryStrategy {
     case none
@@ -83,6 +84,8 @@ enum SpotifyAuthError: Error {
       return "Authorization error: \(reason). Please try logging in again."
     case .invalidRedirectURL:
       return "Invalid redirect URL. Please check your app.json configuration."
+    case .stateMismatch:
+      return "State mismatch error. Please try logging in again."
     }
   }
   
