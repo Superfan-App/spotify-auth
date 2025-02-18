@@ -1,3 +1,5 @@
+// plugin/src/index.ts
+
 import { type ConfigPlugin, createRunOncePlugin, withInfoPlist } from '@expo/config-plugins'
 import { SpotifyConfig } from './types.js'
 

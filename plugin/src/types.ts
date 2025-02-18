@@ -1,3 +1,5 @@
+// plugin/src/types.ts
+
 /**
  * Available Spotify authorization scopes.
  * @see https://developer.spotify.com/documentation/general/guides/authorization/scopes/

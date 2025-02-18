@@ -1,3 +1,5 @@
+// src/index.tsx
+
 import { EventEmitter } from "expo-modules-core";
 import React, { useContext, useEffect, useState, useCallback } from "react";
 

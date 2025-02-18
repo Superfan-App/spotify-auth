@@ -1,3 +1,5 @@
+// ios/SpotifyAuthAuth.swift
+
 import ExpoModulesCore
 import SpotifyiOS
 import KeychainAccess

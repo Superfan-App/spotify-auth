@@ -1,3 +1,5 @@
+# ios/SpotifyAuth.podspec
+
 require 'json'
 
 # Assumes package.json is one level up from the ios/ directory

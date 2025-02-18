@@ -1,3 +1,5 @@
+// ios/SpotifyAuthHeaders.h
+
 #import <Foundation/Foundation.h>
 
 // Import Spotify iOS SDK headers

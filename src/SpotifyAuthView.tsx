@@ -1,3 +1,5 @@
+// src/SpotifyAuthView.tsx
+
 import { requireNativeViewManager } from "expo-modules-core";
 import * as React from "react";
 import { ViewProps } from "react-native";

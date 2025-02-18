@@ -1,3 +1,5 @@
+// ios/SpotifyAuthModule.swift
+
 import ExpoModulesCore
 import SpotifyiOS
 

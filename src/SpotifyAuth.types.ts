@@ -1,3 +1,5 @@
+// src/SpotifyAuth.types.ts
+
 import { createContext } from "react";
 
 /**

@@ -1,3 +1,5 @@
+// src/SpotifyAuthModule.ts
+
 import { requireNativeModule, NativeModule } from "expo-modules-core";
 import type { AuthorizeConfig, SpotifyAuthEvent } from "./SpotifyAuth.types";
 
