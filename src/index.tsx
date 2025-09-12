@@ -1,28 +1,20 @@
 // src/index.tsx
 
-import { EventEmitter } from "expo-modules-core";
 import React, { useContext, useEffect, useState, useCallback } from "react";
 
 import {
-  SpotifyAuthorizationData,
   SpotifyAuthContext,
   SpotifyAuthContextInstance,
   SpotifyAuthState,
   type AuthorizeConfig,
   type SpotifyAuthError,
+  type SpotifyAuthEvent,
 } from "./SpotifyAuth.types";
 import SpotifyAuthModule from "./SpotifyAuthModule";
 
-// First define the event name as a string literal type
-type SpotifyAuthEventName = "onSpotifyAuth"; // This should match SpotifyAuthModule.AuthEventName
-
-// Create a properly typed emitter
-const emitter = new EventEmitter(SpotifyAuthModule);
-
-function addAuthListener(listener: (data: SpotifyAuthorizationData) => void) {
-  // Assert the event name is of the correct type
-  const eventName = SpotifyAuthModule.AuthEventName as SpotifyAuthEventName;
-  return emitter.addListener(eventName, listener);
+function addAuthListener(listener: (event: SpotifyAuthEvent) => void) {
+  const eventName = SpotifyAuthModule.AuthEventName;
+  return SpotifyAuthModule.addListener(eventName, listener);
 }
 
 /**

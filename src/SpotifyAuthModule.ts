@@ -3,12 +3,12 @@
 import { requireNativeModule, NativeModule } from "expo-modules-core";
 import type { AuthorizeConfig, SpotifyAuthEvent } from "./SpotifyAuth.types";
 
-type SpotifyAuthEvents = {
+export type SpotifyAuthEvents = {
   onSpotifyAuth(event: SpotifyAuthEvent): void;
 };
 
 export declare class SpotifyAuthModule extends NativeModule<SpotifyAuthEvents> {
-  readonly AuthEventName: string;
+  readonly AuthEventName: 'onSpotifyAuth';
   readonly authorize: (config: AuthorizeConfig) => Promise<void>;
 }
 

@@ -33,19 +33,27 @@
   "author": "Superfan App",
   "license": "MIT",
   "dependencies": {
-    "@expo/config-plugins": "^7.0.0"
+    "@expo/config-plugins": "^10.1.2"
   },
   "devDependencies": {
-    "@expo/config-types": "^49.0.0",
-    "@types/react": "^18.0.0",
-    "@types/react-native": "^0.70.0",
-    "expo-module-scripts": "^3.0.0",
-    "expo-modules-core": "^1.5.0",
-    "typescript": "^5.0.0"
+    "@eslint/js": "^9.35.0",
+    "@expo/config-types": "^53.0.5",
+    "@types/react": "18.3.24",
+    "eslint": "^9.35.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "expo": "^53.0.22",
+    "expo-module-scripts": "^5.0.7",
+    "expo-modules-core": "^3.0.15",
+    "typescript": "5.4",
+    "typescript-eslint": "^8.43.0"
   },
   "peerDependencies": {
     "expo": "*",
     "react": "*",
     "react-native": "*"
+  },
+  "overrides": {
+    "@types/react": "18.3.24"
   }
 }
