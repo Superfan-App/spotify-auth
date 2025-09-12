@@ -13,8 +13,8 @@ Pod::Spec.new do |s|
   s.license          = package['license']
   s.author           = package['author']
   s.homepage         = package['homepage']
-  s.platform         = :ios, '13.0'
-  s.swift_version    = '5.4'
+  s.platform         = :ios, '15.1'
+  s.swift_version    = '5.9'
   
   s.source           = { 
     git: 'https://github.com/superfan-app/spotify-auth.git',
@@ -31,14 +31,12 @@ Pod::Spec.new do |s|
     'DEFINES_MODULE'            => 'YES',
     'SWIFT_COMPILATION_MODE'    => 'wholemodule',
     'ENABLE_BITCODE'            => 'NO',
-    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0',
-    'FRAMEWORK_SEARCH_PATHS'    => '$(PODS_TARGET_SRCROOT)/Frameworks',
-    'HEADER_SEARCH_PATHS'       => '$(PODS_TARGET_SRCROOT)/Frameworks/SpotifyiOS.xcframework/ios-arm64/SpotifyiOS.framework/Headers'
+    'IPHONEOS_DEPLOYMENT_TARGET' => '15.1'
   }
   
   s.user_target_xcconfig = {
     'ENABLE_BITCODE'            => 'NO',
-    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0',
+    'IPHONEOS_DEPLOYMENT_TARGET' => '15.1',
     'OTHER_LDFLAGS'            => '-ObjC'
   }
   

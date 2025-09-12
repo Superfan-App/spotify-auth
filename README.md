@@ -228,7 +228,18 @@ npx expo run:ios
 
 ## Requirements
 
-- Expo SDK 47+
-- iOS 13.0+
-- Node.js 14.0+
+- Expo SDK 53+
+- iOS 15.1+
+- Swift 5.9 (Xcode 15+)
+- Node.js 20.0+
 - Expo Development Client
+
+## iOS Native Notes
+
+- The Spotify SDK is bundled as a vendored `SpotifyiOS.xcframework`. CocoaPods configures header and framework search paths automatically. You do not need to add manual `HEADER_SEARCH_PATHS` or `FRAMEWORK_SEARCH_PATHS`.
+- If you hit CocoaPods build issues after installing, try:
+```bash
+cd ios
+pod deintegrate
+pod install --repo-update
+```
