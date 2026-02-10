@@ -4,6 +4,14 @@ import ExpoModulesCore
 import SpotifyiOS
 import KeychainAccess
 
+/// Parsed token response fields from the Spotify token endpoint.
+private struct ParsedTokenResponse {
+  let accessToken: String
+  let refreshToken: String?
+  let expiresIn: TimeInterval
+  let scope: String?
+}
+
 /// A lightweight session model to hold token information.
 struct SpotifySessionData {
   let accessToken: String
@@ -322,67 +330,15 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
     
     let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-      if let error = error {
-        self?.handleError(SpotifyAuthError.networkError(error.localizedDescription), context: "token_refresh")
-        return
-      }
-      
-      guard let httpResponse = response as? HTTPURLResponse else {
-        self?.handleError(SpotifyAuthError.networkError("Invalid response type"), context: "token_refresh")
-        return
-      }
-      
-      // Check HTTP status code
-      guard (200...299).contains(httpResponse.statusCode) else {
-        let errorMessage: String
-        if let data = data, let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let errorDescription = errorJson["error_description"] as? String {
-          errorMessage = errorDescription
-        } else {
-          errorMessage = "Server returned status code \(httpResponse.statusCode)"
-        }
-        self?.handleError(SpotifyAuthError.networkError(errorMessage), context: "token_refresh")
-        return
-      }
-      
-      guard let data = data else {
-        self?.handleError(SpotifyAuthError.tokenError("No data received"), context: "token_refresh")
-        return
-      }
-      
       do {
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        guard let json = json else {
-          throw SpotifyAuthError.tokenError("Invalid JSON response")
-        }
-        
-        // Extract and validate required fields
-        guard let accessToken = json["access_token"] as? String else {
-          throw SpotifyAuthError.tokenError("Missing access_token in response")
-        }
-        
-        // Spotify returns expires_in as an integer (seconds)
-        let expiresIn: TimeInterval
-        if let expiresInInt = json["expires_in"] as? Int {
-          expiresIn = TimeInterval(expiresInInt)
-        } else if let expiresInDouble = json["expires_in"] as? Double {
-          expiresIn = expiresInDouble
-        } else {
-          throw SpotifyAuthError.tokenError("Invalid or missing expires_in in response")
-        }
-        
-        guard let tokenType = json["token_type"] as? String,
-              tokenType.lowercased() == "bearer" else {
-          throw SpotifyAuthError.tokenError("Invalid or missing token_type in response")
-        }
-        
-        // Optional field
-        let scope = json["scope"] as? String
+        let responseData = try self?.validateHTTPResponse(data: data, response: response, error: error)
+        guard let responseData = responseData else { return }
+        let parsed = try Self.parseTokenJSON(from: responseData)
         
         // Keep the existing refresh token since server doesn't send a new one
         let refreshToken = currentSession.refreshToken
-        let expirationDate = Date(timeIntervalSinceNow: expiresIn)
-        let newSession = SpotifySessionData(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: scope)
+        let expirationDate = Date(timeIntervalSinceNow: parsed.expiresIn)
+        let newSession = SpotifySessionData(accessToken: parsed.accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: parsed.scope)
         
         DispatchQueue.main.async {
           self?.currentSession = newSession
@@ -537,69 +493,17 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
     
     let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-        if let error = error {
-            self?.handleError(SpotifyAuthError.networkError(error.localizedDescription), context: "token_exchange")
-            return
-        }
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            self?.handleError(SpotifyAuthError.networkError("Invalid response type"), context: "token_exchange")
-            return
-        }
-        
-        // Check HTTP status code
-        guard (200...299).contains(httpResponse.statusCode) else {
-            let errorMessage: String
-            if let data = data, let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let errorDescription = errorJson["error_description"] as? String {
-                errorMessage = errorDescription
-            } else {
-                errorMessage = "Server returned status code \(httpResponse.statusCode)"
-            }
-            self?.handleError(SpotifyAuthError.networkError(errorMessage), context: "token_exchange")
-            return
-        }
-        
-        guard let data = data else {
-            self?.handleError(SpotifyAuthError.tokenError("No data received"), context: "token_exchange")
-            return
-        }
-        
         do {
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            guard let json = json else {
-                throw SpotifyAuthError.tokenError("Invalid JSON response")
-            }
+            let responseData = try self?.validateHTTPResponse(data: data, response: response, error: error)
+            guard let responseData = responseData else { return }
+            let parsed = try Self.parseTokenJSON(from: responseData)
             
-            // Extract and validate required fields
-            guard let accessToken = json["access_token"] as? String else {
-                throw SpotifyAuthError.tokenError("Missing access_token in response")
-            }
-            
-            guard let refreshToken = json["refresh_token"] as? String else {
+            guard let refreshToken = parsed.refreshToken else {
                 throw SpotifyAuthError.tokenError("Missing refresh_token in response")
             }
             
-            // Spotify returns expires_in as an integer (seconds)
-            let expiresIn: TimeInterval
-            if let expiresInInt = json["expires_in"] as? Int {
-                expiresIn = TimeInterval(expiresInInt)
-            } else if let expiresInDouble = json["expires_in"] as? Double {
-                expiresIn = expiresInDouble
-            } else {
-                throw SpotifyAuthError.tokenError("Invalid or missing expires_in in response")
-            }
-            
-            guard let tokenType = json["token_type"] as? String,
-                  tokenType.lowercased() == "bearer" else {
-                throw SpotifyAuthError.tokenError("Invalid or missing token_type in response")
-            }
-            
-            // Optional field
-            let scope = json["scope"] as? String
-            
-            let expirationDate = Date(timeIntervalSinceNow: expiresIn)
-            let sessionData = SpotifySessionData(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: scope)
+            let expirationDate = Date(timeIntervalSinceNow: parsed.expiresIn)
+            let sessionData = SpotifySessionData(accessToken: parsed.accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: parsed.scope)
             DispatchQueue.main.async {
                 self?.currentSession = sessionData
             }
@@ -612,6 +516,62 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
   }
   
   // MARK: - Helpers
+  
+  /// Validate an HTTP response, returning the response data or throwing on failure.
+  private func validateHTTPResponse(data: Data?, response: URLResponse?, error: Error?) throws -> Data {
+    if let error = error {
+      throw SpotifyAuthError.networkError(error.localizedDescription)
+    }
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw SpotifyAuthError.networkError("Invalid response type")
+    }
+    guard (200...299).contains(httpResponse.statusCode) else {
+      let errorMessage = Self.extractErrorMessage(from: data, statusCode: httpResponse.statusCode)
+      throw SpotifyAuthError.networkError(errorMessage)
+    }
+    guard let data = data else {
+      throw SpotifyAuthError.tokenError("No data received")
+    }
+    return data
+  }
+  
+  /// Extract an error message from an HTTP error response body, falling back to the status code.
+  private static func extractErrorMessage(from data: Data?, statusCode: Int) -> String {
+    if let data = data,
+       let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       let errorDescription = errorJson["error_description"] as? String {
+      return errorDescription
+    }
+    return "Server returned status code \(statusCode)"
+  }
+  
+  /// Parse the `expires_in` field from a token response JSON, accepting both Int and Double.
+  private static func parseExpiresIn(from json: [String: Any]) throws -> TimeInterval {
+    if let expiresInInt = json["expires_in"] as? Int {
+      return TimeInterval(expiresInInt)
+    } else if let expiresInDouble = json["expires_in"] as? Double {
+      return expiresInDouble
+    }
+    throw SpotifyAuthError.tokenError("Invalid or missing expires_in in response")
+  }
+  
+  /// Parse and validate a token response JSON, returning the validated fields.
+  private static func parseTokenJSON(from data: Data) throws -> ParsedTokenResponse {
+    guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      throw SpotifyAuthError.tokenError("Invalid JSON response")
+    }
+    guard let accessToken = json["access_token"] as? String else {
+      throw SpotifyAuthError.tokenError("Missing access_token in response")
+    }
+    let expiresIn = try parseExpiresIn(from: json)
+    guard let tokenType = json["token_type"] as? String,
+          tokenType.lowercased() == "bearer" else {
+      throw SpotifyAuthError.tokenError("Invalid or missing token_type in response")
+    }
+    let refreshToken = json["refresh_token"] as? String
+    let scope = json["scope"] as? String
+    return ParsedTokenResponse(accessToken: accessToken, refreshToken: refreshToken, expiresIn: expiresIn, scope: scope)
+  }
   
   private func stringToScope(scopeString: String) -> SPTScope? {
     let scopeMapping: [String: SPTScope] = [
@@ -692,7 +652,6 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         self?.retryAuthentication()
       default:
         self?.retryAttemptsRemaining.removeValue(forKey: context)
-        break
       }
     }
   }
@@ -725,7 +684,6 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         self?.retryAuthentication()
       default:
         self?.retryAttemptsRemaining.removeValue(forKey: context)
-        break
       }
     }
   }
