@@ -11,6 +11,7 @@ if (expoModulesCorePlugin.exists()) {
   applyKotlinExpoModulesCorePlugin()
 }
 
+// Some Expo setups also expect this in buildscript; keeping it for compatibility.
 buildscript {
   def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
   if (expoModulesCorePlugin.exists()) {
@@ -44,6 +45,7 @@ android {
     targetSdkVersion safeExtGet("targetSdkVersion", 35)
   }
 
+  // Allow publishing a sources jar for the release variant
   publishing {
     singleVariant("release") {
       withSourcesJar()
@@ -64,6 +66,22 @@ android {
   }
 }
 
+/**
+ * Resolve Kotlin version safely.
+ * Prefer the root project's configured Kotlin version (most common in RN/Expo),
+ * fall back to a pinned version if none is defined.
+ */
+def resolvedKotlinVersion() {
+  if (rootProject.ext.has('kotlinVersion')) {
+    return rootProject.ext.kotlinVersion
+  }
+  if (project.ext.has('kotlinVersion')) {
+    return project.ext.kotlinVersion
+  }
+  // Fallback: keep this aligned with your app if you pin Kotlin elsewhere.
+  return '2.0.21'
+}
+
 dependencies {
   implementation project(':expo-modules-core')
 
@@ -77,5 +95,5 @@ dependencies {
   // For secure storage of refresh tokens
   implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 
-  implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:${getKotlinVersion()}"
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:${resolvedKotlinVersion()}"
 }
