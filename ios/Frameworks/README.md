@@ -1,0 +1,332 @@
+# Spotify iOS SDK
+
+## Overview
+
+The Spotify iOS framework allows your application to interact with the Spotify app running in the background on a user's device. Capabilities include authorization, getting metadata for the currently playing track and context, as well as issuing playback commands.
+
+**Please Note:** By using Spotify developer tools you accept our [Developer Terms of Use](https://developer.spotify.com/terms).
+
+The Spotify iOS SDK is a set of lightweight objects that connect with the Spotify app and let you control it while all the heavy lifting of playback is offloaded to the Spotify app itself. The Spotify app takes care of playback, networking, offline caching and OS music integration, leaving you to focus on your user experience.  Moving from your app to the Spotify app and vice versa is a streamlined experience where playback and metadata always stay in sync.
+
+[Key Features](#key-features)
+
+[Filing Bugs](#filing-bugs)
+
+[Components](#components)
+
+[How Do App Remote Calls Work?](#how-app-remote-calls-work)
+
+[Terms of Use](#terms-of-use)
+
+[Tutorial](#tutorial)
+
+[Frequently Asked Questions](#frequently-asked-questions)
+
+### Key Features
+
+* Playback is always in sync with Spotify app
+* Playback, networking, and caching is all accounted for by the Spotify app
+* Works offline and online and does not require Web API calls to get metadata for player state
+* Allows authentication through the Spotify app so users don't have to type in their credentials
+
+### Filing Bugs
+
+We love feedback from the developer community, so please feel free to file missing features or bugs over at our [issue tracker](https://github.com/spotify/ios-app-remote-sdk/issues).
+Make sure you search existing issues before creating new ones.
+
+[Open bug tickets](https://github.com/spotify/ios-app-remote-sdk/labels/bug) | [Open feature requests](https://github.com/spotify/ios-app-remote-sdk/labels/feature%20request)
+
+### Requirements
+
+The Spotify iOS framework requires a deployment target of iOS 12 or higher.
+The following architectures are supported in the SDK:
+
+- device: arm64
+- simulator: arm64 x86_64
+
+
+## Components
+
+### Models
+
+* `SPTAppRemoteAlbum`
+* `SPTAppRemoteArtist`
+* `SPTAppRemoteLibraryState`
+* `SPTAppRemotePlaybackRestrictions`
+* `SPTAppRemotePlaybackOptions`
+* `SPTAppRemotePlayerState`
+* `SPTAppRemoteTrack`
+* `SPTAppRemoteContentItem`
+* `SPTAppRemoteUserCapabilities`
+* `SPTAppRemoteImageRepresentable`
+* `SPTConfiguration`
+
+### SPTAppRemote
+
+The main entry point to connect to the Spotify app and retrieve API components. Use this to establish, monitor, and terminate the connection.
+
+### SPTAppRemotePlayerAPI
+
+Send playback related commands such as:
+
+* Play track by URI
+* Resume/pause playback
+* Skip forwards and backwards
+* Seek to position
+* Set shuffle on/off
+* Request player state
+* Request player context
+* Subscribe to player state
+
+### SPTAppRemoteImagesAPI
+
+Fetch an image for a `SPTAppRemoteImageRepresentable`
+
+### SPTAppRemoteUserAPI
+
+Fetch/subscribe/set user-related data such as:
+
+* Fetch and/or subscribe to `SPTAppRemoteUserCapabilities`
+* Determine if a user can play songs on demand (Premium vs Free)
+* Add/remove/check if a song is in a user's library
+
+### SPTAppRemoteContentAPI
+
+Fetch recommended content for the user.
+
+## How App Remote calls work
+
+When you interact with any of the App Remote APIs you pass in a `SPTAppRemoteCallback` block that gets invoked with either the expected result item or an `NSError` if the operation failed. The block is triggered after the command was received by the Spotify app (or if the connection could not be made).
+
+Here is an example using the `SPTAppRemotePlayerAPI` to skip a song:
+
+```swift
+appRemote.playerAPI?.skipToNext { result, error in
+    if let error = error {
+        // Operation failed
+    } else {
+        // Operation succeeded
+    }
+}
+```
+
+### Tutorial and Examples
+
+We provide a few sample projects to help you get started with the iOS Framework in the DemoProjects folder. See the [Readme](DemoProjects/README.md) in the DemoProjects folder for more information on what each sample does.
+
+### Authentication and Authorization
+
+To communicate with the Spotify app your application will need to get a user's permission to control playback first by using built-in authorization for App Remote. To do that you will need to request authorization view when connecting to Spotify. The framework will automatically request the `app-remote-control` scope and show the auth view if user hasn't agreed to it yet.
+
+## Terms of Use
+
+Note that by using Spotify developer tools, you accept our [Developer Terms of Use](https://developer.spotify.com/terms).
+
+### Included Open Source Libraries
+
+* [MPMessagePack](https://github.com/gabriel/MPMessagePack)
+
+## Tutorial
+
+This tutorial leads you step-by-step through the creation of a simple app that uses the Spotify iOS SDK to play an audio track and subscribe to player state. It will walk through the authorization flow.
+
+### Prepare Your Environment
+
+Follow these steps to make sure you are prepared to start coding.
+
+* Download the Spotify iOS framework from the "Clone or download" button at the top of this page, and unzip it.
+* Install the latest version of Spotify from the App Store onto the device you will be using for development. Run the Spotify app and login or sign up.
+**Note:** A **Spotify Premium** account is required to play tracks on-demand using URIs.
+* [Register Your Application](https://developer.spotify.com/documentation/web-api/concepts/apps). You will need to register your application at [Spotify for Developers Dashboard](https://developer.spotify.com/dashboard/) and obtain a client ID. When you register your app you will also need to whitelist a redirect URI that the Spotify app will use to callback to your app after authorization.
+
+### Add Dependencies
+
+1. Add the SpotifyiOS package to your project. You can either do this through Swift Package Manager (SPM), or by adding `SpotifyiOS.xcframework` to your Xcode project directly.
+
+    ![Import SpotifyiOS.framework](img/import_sdk.png)
+
+2. Configure your redirect URI in your app. You can use either a custom URL scheme or Universal Links:
+
+    **Custom URL Scheme (e.g., `myapp://callback`)**
+
+    In your Info.plist, add your redirect URI under "URL types" and "URL Schemes". Be sure to set a unique "URL identifier" as well.
+
+    ![Info.plist](img/info_plist.png)
+
+    **Universal Links (e.g., `https://yourapp.com/callback`)**
+
+    Universal Links require additional setup including an `apple-app-site-association` file on your web server and Associated Domains capability in your app. For more information, see [Apple's Universal Links documentation](https://developer.apple.com/ios/universal-links/).
+
+3. Add the library to your source files.
+
+    ```swift
+    import SpotifyiOS
+    ```
+
+### Authorize Your Application
+
+To use the playback control features of the SDK, the user needs to authorize your application. If they haven't, the connection will fail with a `No token provided` error. To allow the user to authorize your app, you can use the built-in authorization flow.
+
+1. Initialize `SPTConfiguration` with your client ID and redirect URI.
+
+    ```swift
+    let configuration = SPTConfiguration(
+        clientID: "YOUR_CLIENT_ID",
+        redirectURL: URL(string: "your_redirect_uri")!
+        )
+    ```
+
+2. Initialize `SPTAppRemote` with your `SPTConfiguration`
+
+    ```swift
+    self.appRemote = SPTAppRemote(configuration: configuration, logLevel: .debug)
+    ```
+
+3. Initiate the authentication flow (for other ways to detect if Spotify is installed, as well as attributing installs, please see our [Content Linking Guide](https://developer.spotify.com/documentation/ios/tutorials/content-linking)).
+
+    ```swift
+    // Note: An empty string will play the user's last song or pick a random one.
+    self.appRemote.authorizeAndPlayURI("spotify:track:69bp2EbF7Q2rqc5N3ylezZ") { spotifyInstalled in
+        if !spotifyInstalled {
+            /*
+             * The Spotify app is not installed.
+             * Use SKStoreProductViewController with SPTAppRemote.spotifyItunesItemIdentifier() to present the user
+             * with a way to install the Spotify app.
+             */
+        }
+    }
+    ```
+
+4. Configure your `SceneDelegate` to parse out the access token and set it on the `SPTAppRemote` connectionParameters. You can handle custom URL schemes and Universal Links:
+
+    **Custom URL Schemes**
+
+    If your redirect URI is a custom URL scheme (myapp://callback), implement the `scene:openURLContexts:` method:
+
+    ```swift
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        guard let url = URLContexts.first?.url else {
+            return
+        }
+
+        let parameters = appRemote.authorizationParameters(from: url);
+
+        if let access_token = parameters?[SPTAppRemoteAccessTokenKey] {
+            appRemote.connectionParameters.accessToken = access_token
+            self.accessToken = access_token
+        } else if let error_description = parameters?[SPTAppRemoteErrorDescriptionKey] {
+            // Handle authorization error
+            print("Authorization error: \(error_description)")
+        }
+    }
+    ```
+
+    **Universal Links**
+
+    If your redirect URI is configured as a Universal Link, implement the `scene:continueUserActivity:` method:
+
+    ```swift
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        if userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+           let url = userActivity.webpageURL {
+
+            let parameters = appRemote.authorizationParameters(from: url)
+
+            if let access_token = parameters?[SPTAppRemoteAccessTokenKey] {
+                appRemote.connectionParameters.accessToken = access_token
+                self.accessToken = access_token
+            } else if let error_description = parameters?[SPTAppRemoteErrorDescriptionKey] {
+                // Handle authorization error
+                print("Authorization error: \(error_description)")
+            }
+        }
+    }
+    ```
+
+    If you are using the legacy AppDelegate pattern (iOS 12 and below), use the `application:openURL:options:` and `application:continueUserActivity:restorationHandler:` methods instead.
+
+### Connect and Subscribe to Player State
+
+1. Set your connection delegate and attempt to connect.
+
+    ```swift
+    self.appRemote.delegate = self
+    self.appRemote.connect()
+    ```
+
+    ```swift
+    // MARK: AppRemoteDelegate
+
+    func appRemoteDidEstablishConnection(_ appRemote: SPTAppRemote) {
+        // Connection was successful, you can begin issuing commands
+    }
+    func appRemote(_ appRemote: SPTAppRemote, didFailConnectionAttemptWithError error: Error?) {
+        // Connection failed
+    }
+    func appRemote(_ appRemote: SPTAppRemote, didDisconnectWithError error: Error?) {
+        // Connection disconnected
+    }
+    ```
+
+2. Set a delegate and subscribe to player state:
+
+    ```swift
+    self.appRemote.playerAPI?.delegate = self
+    self.appRemote.playerAPI?.subscribe(toPlayerState: { result, error in
+        // Handle Errors
+    })
+    ```
+
+    ```swift
+    // MARK: SPTAppRemotePlayerStateDelegate
+
+    func playerStateDidChange(_ playerState: SPTAppRemotePlayerState) {
+        print("track name \(playerState.track.name)")
+    }
+    ```
+
+### Connection Handling
+
+As a courtesy, you should always disconnect App Remote when your app enters a background state. This tells Spotify that it's safe to disable the active stream. If your app does not properly call disconnect, Spotify has no way of knowing that it should not maintain the connection, which may result in future connection issues.
+
+If you want your app to automatically reconnect after disruption events like incoming calls or Siri interactions, you may use the `sceneWillResignActive` and `sceneDidBecomeActive` callbacks to safely disconnect and reconnect. If you don't wish to reconnect directly, it's typically enough to close the connection in `sceneDidEnterBackground` callbacks.
+
+```swift
+func sceneWillResignActive(_ scene: UIScene) {
+    self.appRemote.disconnect()
+}
+func sceneDidBecomeActive(_ scene: UIScene) {
+    self.appRemote.connect()
+}
+```
+
+For legacy AppDelegate pattern (iOS 12 and below), use the corresponding application lifecycle methods:
+
+```swift
+func applicationWillResignActive(_ application: UIApplication) {
+    self.appRemote.disconnect()
+}
+func applicationDidBecomeActive(_ application: UIApplication) {
+    self.appRemote.connect()
+}
+```
+
+## Frequently Asked Questions
+
+**Why does music need to be playing to connect with `SPTAppRemote`?**
+
+Music must be playing when you connect with `SPTAppRemote` to ensure the Spotify app is not suspended in the background. iOS applications can only stay active in the background for a few seconds unless they are actively doing something like navigation or playing music.
+
+**Is SpotifyiOS.framework thread safe?**
+
+No, the framework currently expects to be called from the main thread. It will offload most of its work to a background thread internally but callbacks to your code will also occur on the main thread.
+
+**What if I need to authorize without starting playback?**
+
+There is an alternative authorization method. You can find more information about that [here](docs/auth.md).
+
+**Can I use this SDK without having the Spotify app installed?**
+
+For App Remote functionality (playback control), the Spotify app must be installed since it handles the actual music playback. However, for authentication only, you can use  `SPTSessionManager` which falls back to web-based authentication when the Spotify app isn't installed.
+
+

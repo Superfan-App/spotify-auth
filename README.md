@@ -82,15 +82,15 @@ import { useSpotifyAuth } from '@superfan-app/spotify-auth';
 
 function MainScreen() {
   const { 
-    accessToken,
+    authState,
     authorize,
     isAuthenticating,
     error
   } = useSpotifyAuth();
 
   useEffect(() => {
-    if (!accessToken && !isAuthenticating) {
-      authorize();
+    if (!authState.accessToken && !isAuthenticating) {
+      authorize({ showDialog: false });
     }
   }, []);
 
@@ -99,14 +99,14 @@ function MainScreen() {
   }
 
   if (error) {
-    return <Text>Error: {error}</Text>;
+    return <Text>Error: {error.message}</Text>;
   }
 
-  if (!accessToken) {
+  if (!authState.accessToken) {
     return <Text>Not authenticated</Text>;
   }
 
-  return <YourAuthenticatedApp token={accessToken} />;
+  return <YourAuthenticatedApp token={authState.accessToken} />;
 }
 ```
 
@@ -127,10 +127,17 @@ Provider component that manages authentication state.
 Hook for accessing authentication state and methods.
 
 Returns:
-- \`accessToken: string | null\` - Current Spotify access token
-- \`authorize(): Promise<void>\` - Start authentication flow
+- \`authState: SpotifyAuthState\` - Authentication state object containing:
+  - \`accessToken: string | null\` - Current Spotify access token
+  - \`refreshToken: string | null\` - Current refresh token
+  - \`expiresIn: number | null\` - Token expiration time in seconds
+  - \`tokenType: string | null\` - Token type (e.g. "Bearer")
+  - \`scope: string | null\` - Granted scopes
+- \`authorize(config: AuthorizeConfig): Promise<void>\` - Start authentication flow
+  - \`config.showDialog?: boolean\` - Whether to force the auth dialog
+  - \`config.campaign?: string\` - Campaign identifier for attribution
 - \`isAuthenticating: boolean\` - Authentication in progress
-- \`error: string | null\` - Last error message
+- \`error: SpotifyAuthError | null\` - Last error (object with \`type\`, \`message\`, and \`details\`)
 
 ### Available Scopes
 
@@ -153,6 +160,7 @@ All standard Spotify scopes are supported:
 - \`user-read-private\`
 - \`user-read-recently-played\`
 - \`user-top-read\`
+- \`openid\`
 
 ## Backend Requirements
 

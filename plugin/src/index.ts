@@ -24,16 +24,13 @@ function validateSpotifyConfig(config: SpotifyConfig) {
   if (!/^[a-z0-9\-_\/]+$/i.test(config.callback)) {
     throw new Error("Invalid callback path format. Path should contain only letters, numbers, hyphens, underscores, and forward slashes.")
   }
-}
 
-function validateScheme(scheme: string) {
-  if (!scheme) {
-    throw new Error("URL scheme is required");
+  // Validate token URLs use HTTPS
+  if (!config.tokenSwapURL.startsWith('https://')) {
+    throw new Error("Token swap URL must use HTTPS")
   }
-  
-  // Ensure scheme follows URL scheme naming conventions
-  if (!/^[a-z][a-z0-9+.-]*$/i.test(scheme)) {
-    throw new Error("Invalid URL scheme format. Scheme should start with a letter and contain only letters, numbers, plus, period, or hyphen.");
+  if (!config.tokenRefreshURL.startsWith('https://')) {
+    throw new Error("Token refresh URL must use HTTPS")
   }
 }
 
@@ -76,18 +73,6 @@ const withSpotifyConfiguration: ConfigPlugin<SpotifyConfig> = (config, props) =>
   });
 };
 
-const withIOSSettings: ConfigPlugin = (config) => {
-  return withInfoPlist(config, (config) => {
-    // Set minimum iOS version and build settings
-    config.modResults.MinimumOSVersion = '13.0';
-    config.modResults.EnableBitcode = false;
-    config.modResults.SwiftVersion = '5.4';
-    config.modResults.IphoneosDeploymentTarget = '13.0';
-
-    return config;
-  });
-};
-
 const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
   // Ensure the config exists
   if (!props) {
@@ -97,12 +82,10 @@ const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
   }
 
   validateSpotifyConfig(props);
-  validateScheme(props.scheme);
 
   // Apply configurations in sequence
   config = withSpotifyConfiguration(config, props);
   config = withSpotifyURLSchemes(config, props);
-  config = withIOSSettings(config);
 
   return config;
 };

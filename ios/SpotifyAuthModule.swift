@@ -84,13 +84,14 @@ public class SpotifyAuthModule: Module {
     }
 
     private func sanitizeErrorMessage(_ message: String) -> String {
-        // Only redact actual sensitive values, not general terms
+        // Only redact actual sensitive values, not general terms.
+        // Capture the key name (group 1) and replace the value with [REDACTED].
         let sensitivePatterns = [
-            "(?i)client[_-]?id=[^&\\s]+",
-            "(?i)access_token=[^&\\s]+",
-            "(?i)refresh_token=[^&\\s]+",
-            "(?i)secret=[^&\\s]+",
-            "(?i)api[_-]?key=[^&\\s]+"
+            "((?i)client[_-]?id=)[^&\\s]+",
+            "((?i)access_token=)[^&\\s]+",
+            "((?i)refresh_token=)[^&\\s]+",
+            "((?i)secret=)[^&\\s]+",
+            "((?i)api[_-]?key=)[^&\\s]+"
         ]
         
         var sanitized = message
@@ -259,13 +260,9 @@ public class SpotifyAuthModule: Module {
             return ("session_error", "session_error")
         case .networkError:
             return ("network_error", "network_failed")
-        case .recoverable(let baseError, _):
-            // Use the base error type but mark as recoverable in the details
-            if let spotifyError = baseError as? SpotifyAuthError {
-                let (type, code) = classifySpotifyError(spotifyError)
-                return (type, "recoverable_\(code)")
-            }
-            return ("recoverable_error", "recoverable_unknown")
+        case .recoverable(let message, _):
+            // The message is a String description; classify as a generic recoverable error
+            return ("recoverable_error", "recoverable_\(message.isEmpty ? "unknown" : "error")")
         case .userCancelled:
             return ("authorization_error", "user_cancelled")
         case .authorizationError:
@@ -294,17 +291,13 @@ extension UIViewController {
     }
 }
 
-// Extension to safely get key window on iOS 13+
+// Extension to safely get key window using modern window scene API
 extension UIApplication {
     var currentKeyWindow: UIWindow? {
-        if #available(iOS 13, *) {
-            return self.connectedScenes
-                .filter { $0.activationState == .foregroundActive }
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap { $0.windows }
-                .first(where: { $0.isKeyWindow })
-        } else {
-            return self.keyWindow
-        }
+        return self.connectedScenes
+            .filter { $0.activationState == .foregroundActive }
+            .compactMap { $0 as? UIWindowScene }
+            .compactMap { $0.keyWindow }
+            .first
     }
 }

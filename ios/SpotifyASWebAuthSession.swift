@@ -79,24 +79,22 @@ final class SpotifyASWebAuthSession {
         authSession = nil
         presentationContextProvider = nil
     }
+    
+    deinit {
+        authSession?.cancel()
+        authSession = nil
+        presentationContextProvider = nil
+    }
 }
 
 // MARK: - Presentation Context Provider
 
 private class PresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        if #available(iOS 13.0, *) {
-            // Get the active window scene
-            let scene = UIApplication.shared.connectedScenes
-                .filter { $0.activationState == .foregroundActive }
-                .first(where: { $0 is UIWindowScene }) as? UIWindowScene
-            
-            // Get the key window from the scene
-            let keyWindow = scene?.windows.first(where: { $0.isKeyWindow })
-            return keyWindow ?? ASPresentationAnchor()
-        } else {
-            // Fallback for older iOS versions
-            return UIApplication.shared.keyWindow ?? ASPresentationAnchor()
-        }
+        let scene = UIApplication.shared.connectedScenes
+            .filter { $0.activationState == .foregroundActive }
+            .first(where: { $0 is UIWindowScene }) as? UIWindowScene
+        
+        return scene?.keyWindow ?? ASPresentationAnchor()
     }
 }

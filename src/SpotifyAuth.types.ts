@@ -108,14 +108,6 @@ export interface AuthorizeConfig {
 }
 
 /**
- * Props for the SpotifyAuthView component
- */
-export interface SpotifyAuthViewProps {
-  /** The name identifier for the auth view */
-  name: string;
-}
-
-/**
  * Spotify authentication state containing all token-related information
  */
 export interface SpotifyAuthState {

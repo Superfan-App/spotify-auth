@@ -119,22 +119,23 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
   /// Our own session model.
   private var currentSession: SpotifySessionData? {
     didSet {
-      cleanupPreviousSession()
-      if let session = currentSession {
+      // Only clean up keychain if we're clearing the session (not replacing with a new one)
+      if currentSession == nil {
+        cleanupPreviousSession()
+      } else if let session = currentSession {
+        // Clear the old refresh timer before scheduling a new one
+        refreshTimer?.invalidate()
         securelyStoreToken(session)
         scheduleTokenRefresh(session)
+        // Clear retry tracking on successful session
+        retryAttemptsRemaining.removeAll()
+        retryDelays.removeAll()
       }
     }
   }
   
   /// If authentication is in progress.
-  private var isAuthenticating: Bool = false {
-    didSet {
-      if !isAuthenticating && currentSession == nil {
-        module?.onAuthorizationError(SpotifyAuthError.sessionError("Authentication process ended without session"))
-      }
-    }
-  }
+  private var isAuthenticating: Bool = false
   
   private var refreshTimer: Timer?
   
@@ -284,9 +285,9 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
   }
   
   /// Refresh token either via SPTSessionManager (app‑switch) or manually (web‑auth).
-  private func refreshToken(retryCount: Int = 0) {
+  private func refreshToken() {
     if isUsingWebAuth {
-      manualRefreshToken(retryCount: retryCount)
+      manualRefreshToken()
     } else {
       guard let sessionManager = self.sessionManager else {
         handleError(SpotifyAuthError.sessionError("Session manager not available"), context: "token_refresh")
@@ -301,7 +302,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
   }
   
   /// Manual refresh (for web‑auth) that calls the token refresh endpoint.
-  private func manualRefreshToken(retryCount: Int = 0) {
+  private func manualRefreshToken() {
     guard let currentSession = self.currentSession else {
       handleError(SpotifyAuthError.sessionError("No session available"), context: "token_refresh")
       return
@@ -316,9 +317,9 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     request.httpMethod = "POST"
     request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
     
-    let params = ["refresh_token": currentSession.refreshToken]
-    let bodyString = params.map { "\($0)=\($1)" }.joined(separator: "&")
-    request.httpBody = bodyString.data(using: .utf8)
+    var components = URLComponents()
+    components.queryItems = [URLQueryItem(name: "refresh_token", value: currentSession.refreshToken)]
+    request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
     
     let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
       if let error = error {
@@ -360,8 +361,13 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
           throw SpotifyAuthError.tokenError("Missing access_token in response")
         }
         
-        guard let expiresInString = json["expires_in"] as? String,
-              let expiresIn = TimeInterval(expiresInString) else {
+        // Spotify returns expires_in as an integer (seconds)
+        let expiresIn: TimeInterval
+        if let expiresInInt = json["expires_in"] as? Int {
+          expiresIn = TimeInterval(expiresInInt)
+        } else if let expiresInDouble = json["expires_in"] as? Double {
+          expiresIn = expiresInDouble
+        } else {
           throw SpotifyAuthError.tokenError("Invalid or missing expires_in in response")
         }
         
@@ -380,7 +386,6 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         
         DispatchQueue.main.async {
           self?.currentSession = newSession
-          self?.module?.onAccessTokenObtained(accessToken, refreshToken: refreshToken, expiresIn: expiresIn, scope: scope, tokenType: tokenType)
         }
       } catch {
         self?.handleError(error, context: "token_refresh")
@@ -526,8 +531,10 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
         return
     }
     
-    let bodyString = params.map { "\($0)=\($1)" }.joined(separator: "&")
-    request.httpBody = bodyString.data(using: .utf8)
+    var components = URLComponents()
+    components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+    // URLComponents.percentEncodedQuery properly encodes the values
+    request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
     
     let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
         if let error = error {
@@ -573,8 +580,13 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
                 throw SpotifyAuthError.tokenError("Missing refresh_token in response")
             }
             
-            guard let expiresInString = json["expires_in"] as? String,
-                  let expiresIn = TimeInterval(expiresInString) else {
+            // Spotify returns expires_in as an integer (seconds)
+            let expiresIn: TimeInterval
+            if let expiresInInt = json["expires_in"] as? Int {
+                expiresIn = TimeInterval(expiresInInt)
+            } else if let expiresInDouble = json["expires_in"] as? Double {
+                expiresIn = expiresInDouble
+            } else {
                 throw SpotifyAuthError.tokenError("Invalid or missing expires_in in response")
             }
             
@@ -590,7 +602,6 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
             let sessionData = SpotifySessionData(accessToken: accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: scope)
             DispatchQueue.main.async {
                 self?.currentSession = sessionData
-                self?.module?.onAccessTokenObtained(accessToken, refreshToken: refreshToken, expiresIn: expiresIn, scope: scope, tokenType: tokenType)
             }
         } catch {
             self?.handleError(error, context: "token_exchange")
@@ -623,6 +634,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
       "user-modify-playback-state": .userModifyPlaybackState,
       "user-read-currently-playing": .userReadCurrentlyPlaying,
       "user-read-recently-played": .userReadRecentlyPlayed,
+      "user-read-playback-position": .userReadPlaybackPosition,
       "openid": .openid
     ]
     return scopeMapping[scopeString]
@@ -650,43 +662,69 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     }
   }
   
+  /// Track remaining retry attempts per context to properly decrement across async retries.
+  private var retryAttemptsRemaining: [String: Int] = [:]
+  private var retryDelays: [String: TimeInterval] = [:]
+  
   private func handleRetry(error: SpotifyAuthError, context: String, remainingAttempts: Int, delay: TimeInterval) {
-    guard remainingAttempts > 0 else {
+    // Initialize tracking on first call for this context
+    if retryAttemptsRemaining[context] == nil {
+      retryAttemptsRemaining[context] = remainingAttempts
+      retryDelays[context] = delay
+    }
+    
+    guard let remaining = retryAttemptsRemaining[context], remaining > 0 else {
+      retryAttemptsRemaining.removeValue(forKey: context)
+      retryDelays.removeValue(forKey: context)
       module?.onAuthorizationError(SpotifyAuthError.authenticationFailed("\(error.localizedDescription) (Max retries reached)"))
       cleanupPreviousSession()
       return
     }
     
-    secureLog("Retrying \(context) in \(delay) seconds. Attempts remaining: \(remainingAttempts)")
+    retryAttemptsRemaining[context] = remaining - 1
+    secureLog("Retrying \(context) in \(delay) seconds. Attempts remaining: \(remaining - 1)")
     
     DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
       switch context {
       case "token_refresh":
-        self?.refreshToken(retryCount: 3 - remainingAttempts)
+        self?.refreshToken()
       case "authentication":
         self?.retryAuthentication()
       default:
+        self?.retryAttemptsRemaining.removeValue(forKey: context)
         break
       }
     }
   }
   
   private func handleExponentialBackoff(error: SpotifyAuthError, context: String, remainingAttempts: Int, currentDelay: TimeInterval) {
-    guard remainingAttempts > 0 else {
+    // Initialize tracking on first call for this context
+    if retryAttemptsRemaining[context] == nil {
+      retryAttemptsRemaining[context] = remainingAttempts
+      retryDelays[context] = currentDelay
+    }
+    
+    guard let remaining = retryAttemptsRemaining[context], remaining > 0 else {
+      retryAttemptsRemaining.removeValue(forKey: context)
+      retryDelays.removeValue(forKey: context)
       module?.onAuthorizationError(SpotifyAuthError.authenticationFailed("\(error.localizedDescription) (Max retries reached)"))
       cleanupPreviousSession()
       return
     }
     
-    secureLog("Retrying \(context) in \(currentDelay) seconds. Attempts remaining: \(remainingAttempts)")
+    let currentRetryDelay = retryDelays[context] ?? currentDelay
+    retryAttemptsRemaining[context] = remaining - 1
+    retryDelays[context] = currentRetryDelay * 2  // Exponential backoff
+    secureLog("Retrying \(context) in \(currentRetryDelay) seconds. Attempts remaining: \(remaining - 1)")
     
-    DispatchQueue.main.asyncAfter(deadline: .now() + currentDelay) { [weak self] in
+    DispatchQueue.main.asyncAfter(deadline: .now() + currentRetryDelay) { [weak self] in
       switch context {
       case "token_refresh":
-        self?.refreshToken(retryCount: 3 - remainingAttempts)
+        self?.refreshToken()
       case "authentication":
         self?.retryAuthentication()
       default:
+        self?.retryAttemptsRemaining.removeValue(forKey: context)
         break
       }
     }
@@ -848,6 +886,7 @@ extension SPTScope {
       (.userModifyPlaybackState, "user-modify-playback-state"),
       (.userReadCurrentlyPlaying, "user-read-currently-playing"),
       (.userReadRecentlyPlayed, "user-read-recently-played"),
+      (.userReadPlaybackPosition, "user-read-playback-position"),
       (.openid, "openid")
     ]
     
