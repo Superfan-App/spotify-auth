@@ -1,6 +1,7 @@
 {
   "platforms": [
-    "ios"
+    "ios",
+    "android"
   ],
   "ios": {
     "modules": [
@@ -8,6 +9,11 @@
     ],
     "appDelegateSubscribers": [
       "SpotifyAuthDelegate"
+    ]
+  },
+  "android": {
+    "modules": [
+      "expo.modules.spotifyauth.SpotifyAuthModule"
     ]
   }
 }

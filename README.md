@@ -6,9 +6,10 @@ A modern Expo module for Spotify authentication in React Native apps. This modul
 
 - 🔐 Complete Spotify OAuth implementation
 - 🔄 Automatic token refresh
-- 📱 iOS support via native SDK
+- 📱 iOS support via native Spotify SDK
+- 🤖 Android support via Spotify Auth Library
 - ⚡️ Modern Expo development workflow
-- 🛡️ Secure token storage
+- 🛡️ Secure token storage (Keychain on iOS, EncryptedSharedPreferences on Android)
 - 🔧 TypeScript support
 - 📝 Comprehensive error handling
 
@@ -57,7 +58,9 @@ npx expo install expo-dev-client
    - Format: `your-app-scheme://callback`
    - Example: `my-spotify-app://callback`
 
-4. Implement token swap/refresh endpoints on your backend (see Backend Requirements below)
+4. **Android only:** Register your app's [SHA-1 fingerprint](https://developer.spotify.com/documentation/android/tutorials/application-fingerprints) in the Spotify Developer Dashboard.
+
+5. Implement token swap/refresh endpoints on your backend (see Backend Requirements below)
 
 ## Usage
 
@@ -203,6 +206,11 @@ npx expo prebuild --clean
 npx expo run:ios
 ```
 
+4. Run on Android:
+```bash
+npx expo run:android
+```
+
 ## Troubleshooting
 
 ### Common Issues
@@ -229,7 +237,7 @@ npx expo run:ios
 ## Security
 
 - Access tokens are stored in memory
-- Refresh tokens are securely stored in Keychain
+- Refresh tokens are securely stored in Keychain (iOS) / EncryptedSharedPreferences (Android)
 - HTTPS required for token endpoints
 - Automatic token refresh
 - Proper error handling and recovery
@@ -238,11 +246,14 @@ npx expo run:ios
 
 - Expo SDK 53+
 - iOS 15.1+
+- Android API 24+ (Android 7.0+)
 - Swift 5.9 (Xcode 15+)
 - Node.js 20.0+
 - Expo Development Client
 
-## iOS Native Notes
+## Platform Notes
+
+### iOS
 
 - The Spotify SDK is bundled as a vendored `SpotifyiOS.xcframework`. CocoaPods configures header and framework search paths automatically. You do not need to add manual `HEADER_SEARCH_PATHS` or `FRAMEWORK_SEARCH_PATHS`.
 - If you hit CocoaPods build issues after installing, try:
@@ -251,3 +262,54 @@ cd ios
 pod deintegrate
 pod install --repo-update
 ```
+
+### Android
+
+The Spotify Auth Library (`spotify-auth-release-2.1.0.aar`) v2.1.0 is bundled in `android/Frameworks/`. It handles both app-switch auth (when Spotify is installed) and WebView fallback (when it's not).
+
+#### Android Setup (if iOS is already configured)
+
+If you already have iOS working, Android requires no changes to your `app.config.js` — the same plugin config drives both platforms. However, you do need to complete these additional steps in the Spotify Developer Dashboard:
+
+1. **Register your Android package name and SHA-1 fingerprint** in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard):
+   - Go to your app → Edit Settings → Android Packages
+   - Add your package name (e.g. `com.yourcompany.yourapp`)
+   - Add your SHA-1 fingerprint(s)
+
+2. **Generate your SHA-1 fingerprint:**
+
+   For **debug** builds:
+   ```bash
+   keytool -alias androiddebugkey -keystore ~/.android/debug.keystore -list -v | grep SHA1
+   ```
+   Default password: `android`
+
+   For **release** builds:
+   ```bash
+   keytool -alias <RELEASE_KEY_ALIAS> -keystore <RELEASE_KEYSTORE_PATH> -list -v | grep SHA1
+   ```
+
+   > We strongly recommend registering both debug and release fingerprints. See [Application Fingerprints](https://developer.spotify.com/documentation/android/tutorials/application-fingerprints) for details.
+
+3. **Ensure the redirect URI** (`your-app-scheme://callback`) is added in the Spotify Dashboard under "Redirect URIs" (this is shared with iOS — likely already done).
+
+4. **Rebuild your app:**
+   ```bash
+   npx expo prebuild --clean
+   npx expo run:android
+   ```
+
+#### What the config plugin does (Android)
+
+The Expo config plugin automatically handles:
+- Injecting `<meta-data>` entries into `AndroidManifest.xml` for `SpotifyClientID`, `SpotifyRedirectURL`, `SpotifyScopes`, `SpotifyTokenSwapURL`, and `SpotifyTokenRefreshURL`
+- Adding an `<intent-filter>` to your main activity for the redirect URI scheme and host
+
+You do **not** need to manually edit `AndroidManifest.xml`.
+
+#### Android-specific behavior
+
+- The `campaign` parameter in `AuthorizeConfig` is **ignored** on Android (not supported by the Spotify Android auth library).
+- Secure token storage uses `EncryptedSharedPreferences` (AES-256) instead of Keychain.
+- When the Spotify app is installed, authentication uses an app-switch flow (no password entry needed). When it's not installed, a WebView fallback is used automatically.
+- Authentication retry for user-interactive flows (e.g. the initial authorization) cannot be retried automatically — the error is reported to JS so your app can prompt the user to try again.

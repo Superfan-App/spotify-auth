@@ -10,6 +10,7 @@ export type SpotifyAuthEvents = {
 export declare class SpotifyAuthModule extends NativeModule<SpotifyAuthEvents> {
   readonly AuthEventName: 'onSpotifyAuth';
   readonly authorize: (config: AuthorizeConfig) => Promise<void>;
+  readonly dismissAuthSession: () => Promise<void>;
 }
 
 // This call loads the native module object from the JSI.

@@ -1,6 +1,6 @@
 // plugin/src/index.ts
 
-import { type ConfigPlugin, createRunOncePlugin, withInfoPlist } from '@expo/config-plugins'
+import { type ConfigPlugin, createRunOncePlugin, withInfoPlist, withAndroidManifest, AndroidConfig } from '@expo/config-plugins'
 import { SpotifyConfig } from './types.js'
 
 const pkg = require('../../package.json');
@@ -73,6 +73,81 @@ const withSpotifyConfiguration: ConfigPlugin<SpotifyConfig> = (config, props) =>
   });
 };
 
+// region Android config plugins
+
+const withSpotifyAndroidManifest: ConfigPlugin<SpotifyConfig> = (config, props) => {
+  return withAndroidManifest(config, (config) => {
+    const mainApplication = AndroidConfig.Manifest.getMainApplicationOrThrow(config.modResults);
+
+    // Construct the redirect URL from scheme and callback
+    const redirectUrl = `${props.scheme}://${props.callback}`;
+
+    // Add Spotify configuration as meta-data elements
+    const metaDataEntries = [
+      { name: 'SpotifyClientID', value: props.clientID },
+      { name: 'SpotifyRedirectURL', value: redirectUrl },
+      { name: 'SpotifyScopes', value: props.scopes.join(',') },
+      { name: 'SpotifyTokenSwapURL', value: props.tokenSwapURL },
+      { name: 'SpotifyTokenRefreshURL', value: props.tokenRefreshURL },
+    ];
+
+    if (!mainApplication['meta-data']) {
+      mainApplication['meta-data'] = [];
+    }
+
+    for (const entry of metaDataEntries) {
+      // Remove existing entry if present
+      mainApplication['meta-data'] = mainApplication['meta-data'].filter(
+        (item: any) => item.$?.['android:name'] !== entry.name
+      );
+      // Add new entry
+      mainApplication['meta-data'].push({
+        $: {
+          'android:name': entry.name,
+          'android:value': entry.value,
+        },
+      });
+    }
+
+    // Add intent filter to the main activity for the redirect URI scheme
+    const mainActivity = AndroidConfig.Manifest.getMainActivityOrThrow(config.modResults);
+
+    if (!mainActivity['intent-filter']) {
+      mainActivity['intent-filter'] = [];
+    }
+
+    // Check if we already have a Spotify redirect intent filter
+    const hasSpotifyIntentFilter = mainActivity['intent-filter'].some(
+      (filter: any) =>
+        filter.data?.some(
+          (d: any) => d.$?.['android:scheme'] === props.scheme && d.$?.['android:host'] === props.callback
+        )
+    );
+
+    if (!hasSpotifyIntentFilter) {
+      mainActivity['intent-filter'].push({
+        action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
+        category: [
+          { $: { 'android:name': 'android.intent.category.DEFAULT' } },
+          { $: { 'android:name': 'android.intent.category.BROWSABLE' } },
+        ],
+        data: [
+          {
+            $: {
+              'android:scheme': props.scheme,
+              'android:host': props.callback,
+            },
+          },
+        ],
+      });
+    }
+
+    return config;
+  });
+};
+
+// endregion
+
 const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
   // Ensure the config exists
   if (!props) {
@@ -83,9 +158,12 @@ const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
 
   validateSpotifyConfig(props);
 
-  // Apply configurations in sequence
+  // Apply iOS configurations
   config = withSpotifyConfiguration(config, props);
   config = withSpotifyURLSchemes(config, props);
+
+  // Apply Android configurations
+  config = withSpotifyAndroidManifest(config, props);
 
   return config;
 };
