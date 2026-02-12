@@ -85,10 +85,11 @@ def resolvedKotlinVersion() {
 dependencies {
   implementation project(':expo-modules-core')
 
-  // Spotify Auth Library (local .aar)
-  implementation files('Frameworks/spotify-auth-release-2.1.0.aar')
+  // Spotify Auth Library - per Spotify docs: https://developer.spotify.com/documentation/android/tutorials/authorization
+  // 3.1.0: Kotlin, 3.0.0: mandatory redirectPathPattern, 2.2.0: PKCE support
+  implementation 'com.spotify.android:auth:3.1.0'
 
-  // Required for Spotify Auth Library's browser-based fallback
+  // Required for Spotify Auth Library's Custom Tabs / browser fallback
   implementation 'androidx.browser:browser:1.8.0'
   implementation 'androidx.appcompat:appcompat:1.7.0'
 
