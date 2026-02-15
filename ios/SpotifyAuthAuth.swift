@@ -594,7 +594,6 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
       "user-modify-playback-state": .userModifyPlaybackState,
       "user-read-currently-playing": .userReadCurrentlyPlaying,
       "user-read-recently-played": .userReadRecentlyPlayed,
-      "user-read-playback-position": .userReadPlaybackPosition,
       "openid": .openid
     ]
     return scopeMapping[scopeString]
@@ -844,10 +843,9 @@ extension SPTScope {
       (.userModifyPlaybackState, "user-modify-playback-state"),
       (.userReadCurrentlyPlaying, "user-read-currently-playing"),
       (.userReadRecentlyPlayed, "user-read-recently-played"),
-      (.userReadPlaybackPosition, "user-read-playback-position"),
       (.openid, "openid")
     ]
-    
+
     return scopeMapping.filter { contains($0.0) }.map { $0.1 }
   }
 }
