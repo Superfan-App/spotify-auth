@@ -1,4 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <!-- No permissions needed at the library level.
+  <!-- Required for token exchange with backend -->
+  <uses-permission android:name="android.permission.INTERNET" />
+
+  <!-- Package visibility for Android 11+ (API 30+) -->
+  <!-- Required for the app to detect and launch Spotify -->
+  <queries>
+    <package android:name="com.spotify.music" />
+  </queries>
+
+  <!-- No other permissions needed at the library level.
        The config plugin will add intent-filters to the host app's manifest. -->
 </manifest>

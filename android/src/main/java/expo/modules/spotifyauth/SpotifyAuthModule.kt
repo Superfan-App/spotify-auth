@@ -24,8 +24,13 @@ class SpotifyAuthModule : Module() {
         Name("SpotifyAuth")
 
         OnCreate {
-            spotifyAuth.module = this@SpotifyAuthModule
-            secureLog("Module initialized")
+            secureLog("SpotifyAuthModule OnCreate called")
+            try {
+                spotifyAuth.module = this@SpotifyAuthModule
+                secureLog("Module initialized and linked to SpotifyAuthAuth")
+            } catch (e: Exception) {
+                android.util.Log.e("SpotifyAuth", "Failed to initialize module: ${e.message}", e)
+            }
         }
 
         Constants(
@@ -58,6 +63,7 @@ class SpotifyAuthModule : Module() {
         }
 
         OnActivityResult { _, payload ->
+            secureLog("OnActivityResult received in module - requestCode=${payload.requestCode}, resultCode=${payload.resultCode}")
             spotifyAuth.handleActivityResult(payload.requestCode, payload.resultCode, payload.data)
         }
 
@@ -85,7 +91,12 @@ class SpotifyAuthModule : Module() {
             "scope" to scope,
             "error" to null
         )
-        sendEvent(SPOTIFY_AUTH_EVENT_NAME, eventData)
+        try {
+            sendEvent(SPOTIFY_AUTH_EVENT_NAME, eventData)
+            secureLog("Success event sent to JS")
+        } catch (e: Exception) {
+            android.util.Log.e("SpotifyAuth", "Failed to send success event to JS: ${e.message}", e)
+        }
     }
 
     fun onSignOut() {
@@ -103,6 +114,8 @@ class SpotifyAuthModule : Module() {
     }
 
     fun onAuthorizationError(error: Exception) {
+        android.util.Log.d("SpotifyAuth", "onAuthorizationError called with: ${error.javaClass.simpleName}: ${error.message}")
+
         // Skip sending error events for expected state transitions
         if (error is SpotifyAuthException.SessionError) {
             val msg = error.message ?: ""
@@ -125,7 +138,7 @@ class SpotifyAuthModule : Module() {
             )
         }
 
-        secureLog("Authorization error: ${errorData["message"] ?: "Unknown error"}")
+        android.util.Log.e("SpotifyAuth", "Authorization error: ${errorData["message"] ?: "Unknown error"}")
 
         val eventData = mapOf(
             "success" to false,
@@ -136,7 +149,13 @@ class SpotifyAuthModule : Module() {
             "scope" to null,
             "error" to errorData
         )
-        sendEvent(SPOTIFY_AUTH_EVENT_NAME, eventData)
+
+        try {
+            sendEvent(SPOTIFY_AUTH_EVENT_NAME, eventData)
+            secureLog("Error event sent to JS successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("SpotifyAuth", "CRITICAL: Failed to send error event to JS: ${e.message}", e)
+        }
     }
 
     // endregion

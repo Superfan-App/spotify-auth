@@ -82,6 +82,10 @@ def resolvedKotlinVersion() {
   return '2.0.21'
 }
 
+repositories {
+  mavenCentral()
+}
+
 dependencies {
   implementation project(':expo-modules-core')
 

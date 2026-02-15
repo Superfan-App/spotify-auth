@@ -50,8 +50,18 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
 
     /** Weak-ish reference to the module for sending events back to JS. */
     var module: SpotifyAuthModule? = null
+        set(value) {
+            field = value
+            if (value != null) {
+                secureLog("Module reference set successfully")
+            } else {
+                Log.w(TAG, "Module reference set to null")
+            }
+        }
 
     private var isAuthenticating = false
+    private var authTimeoutHandler: Runnable? = null
+    private val AUTH_TIMEOUT_MS = 60_000L // 60 seconds timeout
     private var currentSession: SpotifySessionData? = null
         set(value) {
             field = value
@@ -85,7 +95,18 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
             )
             ai.metaData?.getString(key)
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to get meta-data for key $key: ${e.message}")
             null
+        }
+    }
+
+    private fun isSpotifyInstalled(): Boolean {
+        val context = appContext.reactContext ?: return false
+        return try {
+            context.packageManager.getPackageInfo("com.spotify.music", 0)
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -112,6 +133,53 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
             return scopesStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
         }
 
+    /**
+     * Verify the app configuration and log any potential issues.
+     * Helps diagnose setup problems.
+     */
+    private fun verifyConfiguration() {
+        try {
+            val context = appContext.reactContext
+            if (context == null) {
+                Log.e(TAG, "React context is null - app may not be fully initialized")
+                return
+            }
+
+            // Check meta-data configuration
+            val configKeys = listOf(
+                "SpotifyClientID",
+                "SpotifyRedirectURL",
+                "SpotifyScopes",
+                "SpotifyTokenSwapURL",
+                "SpotifyTokenRefreshURL"
+            )
+
+            var allConfigured = true
+            for (key in configKeys) {
+                val value = getMetaData(key)
+                if (value.isNullOrEmpty()) {
+                    Log.e(TAG, "Missing or empty configuration: $key")
+                    allConfigured = false
+                } else {
+                    Log.d(TAG, "Configuration $key: ${if (key.contains("URL") || key.contains("ID")) value.take(20) + "..." else value}")
+                }
+            }
+
+            if (allConfigured) {
+                Log.d(TAG, "All required configuration values are present")
+            } else {
+                Log.e(TAG, "Some configuration values are missing - auth will likely fail")
+            }
+
+            // Check if Spotify app is installed
+            val spotifyInstalled = isSpotifyInstalled()
+            Log.d(TAG, "Spotify app installed: $spotifyInstalled")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during configuration verification: ${e.message}", e)
+        }
+    }
+
     // endregion
 
     // region Authentication Flow
@@ -122,19 +190,52 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
      * and WebView fallback automatically.
      */
     fun initAuth(config: AuthorizeConfig) {
+        secureLog("initAuth called with showDialog=${config.showDialog}")
+
+        // Verify configuration on first auth attempt
+        verifyConfiguration()
+
+        // Cancel any existing timeout
+        authTimeoutHandler?.let { mainHandler.removeCallbacks(it) }
+
         try {
+            if (module == null) {
+                Log.e(TAG, "CRITICAL: Module reference is null when initAuth called")
+                throw SpotifyAuthException.SessionError("Module not properly initialized")
+            }
+
             val activity = appContext.currentActivity
-                ?: throw SpotifyAuthException.SessionError("No activity available")
+            if (activity == null) {
+                Log.e(TAG, "CRITICAL: No current activity available for auth")
+                throw SpotifyAuthException.SessionError("No activity available")
+            }
+
+            secureLog("Current activity: ${activity.javaClass.simpleName}")
 
             val clientId = clientID
             val redirectUri = redirectURL
             val scopeArray = scopes.toTypedArray()
 
+            val spotifyInstalled = isSpotifyInstalled()
+            secureLog("Configuration - ClientID: ${clientId.take(8)}..., RedirectURI: $redirectUri, Scopes: ${scopeArray.size}")
+            Log.d(TAG, "Spotify app installed: $spotifyInstalled (will use ${if (spotifyInstalled) "app-switch" else "WebView"} auth)")
+
+            if (!spotifyInstalled) {
+                Log.w(TAG, "Spotify app not detected. Will use WebView fallback. If WebView fails, check package visibility in AndroidManifest (<queries> tag)")
+            }
+
             if (scopeArray.isEmpty()) {
+                Log.e(TAG, "No valid scopes found in configuration")
                 throw SpotifyAuthException.InvalidConfiguration("No valid scopes found in configuration")
             }
 
+            if (isAuthenticating) {
+                Log.w(TAG, "Auth already in progress, ignoring duplicate request")
+                return
+            }
+
             isAuthenticating = true
+            secureLog("Setting isAuthenticating to true")
 
             val builder = AuthorizationRequest.Builder(
                 clientId,
@@ -145,6 +246,7 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
 
             if (config.showDialog) {
                 builder.setShowDialog(true)
+                secureLog("Force-showing login dialog")
             }
 
             // Note: The Android Spotify auth-lib doesn't support a 'campaign' parameter
@@ -152,18 +254,42 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
 
             val request = builder.build()
 
-            // AuthorizationClient.openLoginActivity handles both flows:
-            // - If Spotify is installed: app-switch auth
-            // - If Spotify is not installed: opens a WebView with Spotify login
-            AuthorizationClient.openLoginActivity(activity, REQUEST_CODE, request)
+            secureLog("Opening Spotify authorization activity with REQUEST_CODE=$REQUEST_CODE")
+
+            // Set a timeout to detect if the auth flow doesn't complete
+            authTimeoutHandler = Runnable {
+                if (isAuthenticating) {
+                    Log.e(TAG, "Auth timeout - no response received after ${AUTH_TIMEOUT_MS}ms")
+                    isAuthenticating = false
+                    module?.onAuthorizationError(
+                        SpotifyAuthException.AuthenticationFailed("Authorization timed out. Please try again.")
+                    )
+                }
+            }
+            mainHandler.postDelayed(authTimeoutHandler!!, AUTH_TIMEOUT_MS)
+
+            try {
+                // AuthorizationClient.openLoginActivity handles both flows:
+                // - If Spotify is installed: app-switch auth
+                // - If Spotify is not installed: opens a WebView with Spotify login
+                AuthorizationClient.openLoginActivity(activity, REQUEST_CODE, request)
+                secureLog("AuthorizationClient.openLoginActivity called successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to open authorization activity: ${e.message}", e)
+                throw SpotifyAuthException.AuthenticationFailed("Failed to open Spotify authorization: ${e.message}")
+            }
+
         } catch (e: SpotifyAuthException) {
+            Log.e(TAG, "Auth initialization failed (SpotifyAuthException): ${e.message}")
             isAuthenticating = false
-            module?.onAuthorizationError(e)
+            authTimeoutHandler?.let { mainHandler.removeCallbacks(it) }
+            module?.onAuthorizationError(e) ?: Log.e(TAG, "Cannot send error - module is null")
         } catch (e: Exception) {
+            Log.e(TAG, "Auth initialization failed (Exception): ${e.message}", e)
             isAuthenticating = false
-            module?.onAuthorizationError(
-                SpotifyAuthException.AuthenticationFailed(e.message ?: "Unknown error")
-            )
+            authTimeoutHandler?.let { mainHandler.removeCallbacks(it) }
+            val error = SpotifyAuthException.AuthenticationFailed(e.message ?: "Unknown error")
+            module?.onAuthorizationError(error) ?: Log.e(TAG, "Cannot send error - module is null")
         }
     }
 
@@ -172,43 +298,74 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
      * Called by the module's OnActivityResult handler.
      */
     fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode != REQUEST_CODE) return
+        Log.d(TAG, "handleActivityResult called - requestCode=$requestCode, resultCode=$resultCode, hasData=${data != null}")
+
+        if (requestCode != REQUEST_CODE) {
+            Log.d(TAG, "Ignoring activity result - wrong request code (expected $REQUEST_CODE, got $requestCode)")
+            return
+        }
+
+        // Cancel the timeout
+        authTimeoutHandler?.let {
+            mainHandler.removeCallbacks(it)
+            secureLog("Auth timeout cancelled")
+        }
+
+        if (!isAuthenticating) {
+            Log.w(TAG, "Received activity result but isAuthenticating was false")
+        }
 
         isAuthenticating = false
+        secureLog("Setting isAuthenticating to false")
 
-        val response = AuthorizationClient.getResponse(resultCode, data)
+        if (module == null) {
+            Log.e(TAG, "CRITICAL: Module is null in handleActivityResult - cannot send events to JS")
+            return
+        }
 
-        when (response.type) {
-            AuthorizationResponse.Type.CODE -> {
-                secureLog("Authorization code received")
-                val code = response.code
-                if (code != null) {
-                    exchangeCodeForToken(code)
-                } else {
+        try {
+            val response = AuthorizationClient.getResponse(resultCode, data)
+            Log.d(TAG, "Spotify response type: ${response.type}")
+
+            when (response.type) {
+                AuthorizationResponse.Type.CODE -> {
+                    val code = response.code
+                    secureLog("Authorization code received, length=${code?.length ?: 0}")
+                    if (code != null) {
+                        exchangeCodeForToken(code)
+                    } else {
+                        Log.e(TAG, "Authorization code was null despite CODE response type")
+                        module?.onAuthorizationError(
+                            SpotifyAuthException.AuthenticationFailed("No authorization code received")
+                        )
+                    }
+                }
+                AuthorizationResponse.Type.ERROR -> {
+                    val errorMsg = response.error ?: "Unknown error"
+                    Log.e(TAG, "Spotify authorization error: $errorMsg")
+                    if (errorMsg.contains("access_denied", ignoreCase = true) ||
+                        errorMsg.contains("cancelled", ignoreCase = true)) {
+                        module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
+                    } else {
+                        module?.onAuthorizationError(SpotifyAuthException.AuthorizationError(errorMsg))
+                    }
+                }
+                AuthorizationResponse.Type.EMPTY -> {
+                    Log.w(TAG, "Authorization returned EMPTY - user likely cancelled")
+                    module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
+                }
+                else -> {
+                    Log.e(TAG, "Unexpected Spotify response type: ${response.type}")
                     module?.onAuthorizationError(
-                        SpotifyAuthException.AuthenticationFailed("No authorization code received")
+                        SpotifyAuthException.AuthenticationFailed("Unexpected response type: ${response.type}")
                     )
                 }
             }
-            AuthorizationResponse.Type.ERROR -> {
-                val errorMsg = response.error ?: "Unknown error"
-                secureLog("Authorization error: $errorMsg")
-                if (errorMsg.contains("access_denied", ignoreCase = true) ||
-                    errorMsg.contains("cancelled", ignoreCase = true)) {
-                    module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
-                } else {
-                    module?.onAuthorizationError(SpotifyAuthException.AuthorizationError(errorMsg))
-                }
-            }
-            AuthorizationResponse.Type.EMPTY -> {
-                secureLog("Authorization was cancelled or returned empty")
-                module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
-            }
-            else -> {
-                module?.onAuthorizationError(
-                    SpotifyAuthException.AuthenticationFailed("Unexpected response type: ${response.type}")
-                )
-            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception in handleActivityResult: ${e.message}", e)
+            module?.onAuthorizationError(
+                SpotifyAuthException.AuthenticationFailed("Error processing auth result: ${e.message}")
+            )
         }
     }
 
@@ -220,16 +377,29 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
      * Exchange an authorization code for access + refresh tokens via the backend token swap URL.
      */
     private fun exchangeCodeForToken(code: String) {
+        secureLog("Starting token exchange process")
+
+        if (module == null) {
+            Log.e(TAG, "CRITICAL: Module is null in exchangeCodeForToken")
+            return
+        }
+
         executor.execute {
             try {
                 val swapUrl = tokenSwapURL
                 val redirect = redirectURL
 
+                Log.d(TAG, "Token swap URL: ${swapUrl.take(30)}...")
+                Log.d(TAG, "Redirect URL: $redirect")
+
                 if (!swapUrl.startsWith("https://")) {
+                    Log.e(TAG, "Token swap URL does not use HTTPS: $swapUrl")
                     throw SpotifyAuthException.InvalidConfiguration("Token swap URL must use HTTPS")
                 }
 
                 val url = URL(swapUrl)
+                Log.d(TAG, "Opening connection to token swap URL")
+
                 val connection = url.openConnection() as HttpURLConnection
                 connection.apply {
                     requestMethod = "POST"
@@ -240,14 +410,19 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
                 }
 
                 val body = "code=${Uri.encode(code)}&redirect_uri=${Uri.encode(redirect)}"
+                Log.d(TAG, "Sending token exchange request (code length: ${code.length})")
+
                 OutputStreamWriter(connection.outputStream).use { writer ->
                     writer.write(body)
                     writer.flush()
                 }
 
                 val responseCode = connection.responseCode
+                Log.d(TAG, "Token exchange response code: $responseCode")
+
                 if (responseCode !in 200..299) {
                     val errorMessage = extractErrorMessage(connection, responseCode)
+                    Log.e(TAG, "Token exchange failed with status $responseCode: $errorMessage")
                     throw SpotifyAuthException.NetworkError(errorMessage)
                 }
 
@@ -255,12 +430,16 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
                     it.readText()
                 }
 
+                Log.d(TAG, "Token exchange response received (body length: ${responseBody.length})")
+
                 val parsed = parseTokenJSON(responseBody)
 
                 val refreshToken = parsed.refreshToken
                     ?: throw SpotifyAuthException.TokenError("Missing refresh_token in response")
 
                 val expirationTime = System.currentTimeMillis() + (parsed.expiresIn * 1000).toLong()
+
+                Log.d(TAG, "Token exchange successful - expires in ${parsed.expiresIn} seconds")
 
                 val session = SpotifySessionData(
                     accessToken = parsed.accessToken,
@@ -270,6 +449,7 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
                 )
 
                 mainHandler.post {
+                    secureLog("Setting currentSession and sending success event to JS")
                     currentSession = session
                 }
 
@@ -388,8 +568,17 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
     }
 
     private fun securelyStoreToken(session: SpotifySessionData) {
+        secureLog("Storing token and sending to JS")
+
+        if (module == null) {
+            Log.e(TAG, "CRITICAL: Module is null in securelyStoreToken - cannot send token to JS")
+            return
+        }
+
         // Send the token back to JS
         val expiresIn = (session.expirationTime - System.currentTimeMillis()) / 1000.0
+        Log.d(TAG, "Sending access token to JS (expires in ${expiresIn}s)")
+
         module?.onAccessTokenObtained(
             session.accessToken,
             session.refreshToken,
@@ -404,8 +593,9 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
                 getEncryptedPrefs()?.edit()
                     ?.putString(PREF_REFRESH_TOKEN_KEY, session.refreshToken)
                     ?.apply()
+                Log.d(TAG, "Refresh token stored securely")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to store refresh token securely: ${e.message}")
+                Log.e(TAG, "Failed to store refresh token securely: ${e.message}", e)
             }
         }
     }
@@ -449,6 +639,8 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
     }
 
     fun cleanup() {
+        secureLog("Cleaning up SpotifyAuthAuth instance")
+        authTimeoutHandler?.let { mainHandler.removeCallbacks(it) }
         refreshHandler.removeCallbacksAndMessages(null)
         executor.shutdown()
         instance = null
