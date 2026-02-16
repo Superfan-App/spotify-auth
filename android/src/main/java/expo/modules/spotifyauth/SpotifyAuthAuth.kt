@@ -103,9 +103,16 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
     private fun isSpotifyInstalled(): Boolean {
         val context = appContext.reactContext ?: return false
         return try {
-            context.packageManager.getPackageInfo("com.spotify.music", 0)
+            val packageInfo = context.packageManager.getPackageInfo("com.spotify.music", 0)
+            Log.d(TAG, "Spotify app detected: com.spotify.music (version: ${packageInfo.versionName})")
             true
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.d(TAG, "Spotify app NOT detected: ${e.message}")
+            Log.d(TAG, "If Spotify IS installed, this may be a package visibility issue (Android 11+)")
+            Log.d(TAG, "Ensure <queries><package android:name=\"com.spotify.music\"/></queries> is in merged manifest")
+            false
         } catch (e: Exception) {
+            Log.e(TAG, "Error checking for Spotify app: ${e.message}", e)
             false
         }
     }
@@ -256,6 +263,18 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
 
             secureLog("Opening Spotify authorization activity with REQUEST_CODE=$REQUEST_CODE")
 
+            // === ENHANCED DEBUG LOGGING ===
+            Log.d(TAG, "=== SPOTIFY AUTH DEBUG ===")
+            Log.d(TAG, "Auth flow type: ${if (spotifyInstalled) "APP_SWITCH" else "WEBVIEW"}")
+            Log.d(TAG, "Client ID: ${clientId.take(10)}...")
+            Log.d(TAG, "Redirect URI: $redirectUri")
+            Log.d(TAG, "Response Type: CODE")
+            Log.d(TAG, "Scopes: ${scopeArray.joinToString(",")}")
+            Log.d(TAG, "Package name: ${appContext.reactContext?.packageName}")
+            Log.d(TAG, "Activity: ${activity.javaClass.name}")
+            Log.d(TAG, "Activity launchMode: ${activity.packageManager.getActivityInfo(activity.componentName, 0).launchMode}")
+            Log.d(TAG, "========================")
+
             // Set a timeout to detect if the auth flow doesn't complete
             authTimeoutHandler = Runnable {
                 if (isAuthenticating) {
@@ -299,6 +318,28 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
      */
     fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         Log.d(TAG, "handleActivityResult called - requestCode=$requestCode, resultCode=$resultCode, hasData=${data != null}")
+
+        // === ENHANCED DEBUG LOGGING FOR ACTIVITY RESULT ===
+        if (data != null) {
+            Log.d(TAG, "Intent data URI: ${data.data}")
+            Log.d(TAG, "Intent action: ${data.action}")
+            Log.d(TAG, "Intent extras keys: ${data.extras?.keySet()?.joinToString() ?: "none"}")
+            data.extras?.let { extras ->
+                for (key in extras.keySet()) {
+                    val value = extras.get(key)
+                    if (key.contains("token", ignoreCase = true) ||
+                        key.contains("code", ignoreCase = true) ||
+                        key.contains("secret", ignoreCase = true)) {
+                        Log.d(TAG, "  $key: [REDACTED]")
+                    } else {
+                        Log.d(TAG, "  $key: $value")
+                    }
+                }
+            }
+        } else {
+            Log.w(TAG, "Intent data is NULL - callback may not have fired correctly")
+            Log.w(TAG, "This often indicates an intent filter configuration issue")
+        }
 
         if (requestCode != REQUEST_CODE) {
             Log.d(TAG, "Ignoring activity result - wrong request code (expected $REQUEST_CODE, got $requestCode)")
