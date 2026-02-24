@@ -1,6 +1,7 @@
 package expo.modules.spotifyauth
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
@@ -272,8 +273,28 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
             Log.d(TAG, "Scopes: ${scopeArray.joinToString(",")}")
             Log.d(TAG, "Package name: ${appContext.reactContext?.packageName}")
             Log.d(TAG, "Activity: ${activity.javaClass.name}")
-            Log.d(TAG, "Activity launchMode: ${activity.packageManager.getActivityInfo(activity.componentName, 0).launchMode}")
+            val launchMode = activity.packageManager.getActivityInfo(activity.componentName, 0).launchMode
+            Log.d(TAG, "Activity launchMode: $launchMode")
             Log.d(TAG, "========================")
+
+            if (launchMode == ActivityInfo.LAUNCH_SINGLE_TASK || launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE) {
+                val modeName = if (launchMode == ActivityInfo.LAUNCH_SINGLE_TASK) "singleTask" else "singleInstance"
+                Log.e(TAG, "")
+                Log.e(TAG, "╔══════════════════════════════════════════════════════════════╗")
+                Log.e(TAG, "║  SPOTIFY APP-SWITCH AUTH WILL LIKELY FAIL                    ║")
+                Log.e(TAG, "╠══════════════════════════════════════════════════════════════╣")
+                Log.e(TAG, "║  MainActivity has android:launchMode=\"$modeName\"")
+                Log.e(TAG, "║                                                              ║")
+                Log.e(TAG, "║  Android 7+ does not properly deliver startActivityForResult ║")
+                Log.e(TAG, "║  results to singleTask/singleInstance activities. The Spotify║")
+                Log.e(TAG, "║  auth dialog will flash briefly and immediately dismiss.     ║")
+                Log.e(TAG, "║                                                              ║")
+                Log.e(TAG, "║  FIX (client-side): In your app's AndroidManifest.xml,      ║")
+                Log.e(TAG, "║  change MainActivity's android:launchMode to \"singleTop\"     ║")
+                Log.e(TAG, "║  or remove the launchMode attribute entirely.               ║")
+                Log.e(TAG, "╚══════════════════════════════════════════════════════════════╝")
+                Log.e(TAG, "")
+            }
 
             // Set a timeout to detect if the auth flow doesn't complete
             authTimeoutHandler = Runnable {
@@ -392,7 +413,33 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
                     }
                 }
                 AuthorizationResponse.Type.EMPTY -> {
-                    Log.w(TAG, "Authorization returned EMPTY - user likely cancelled")
+                    val spotifyInstalled = isSpotifyInstalled()
+                    if (spotifyInstalled) {
+                        Log.e(TAG, "")
+                        Log.e(TAG, "╔══════════════════════════════════════════════════════════════╗")
+                        Log.e(TAG, "║  SPOTIFY APP-SWITCH AUTH: EMPTY RESPONSE                     ║")
+                        Log.e(TAG, "╠══════════════════════════════════════════════════════════════╣")
+                        Log.e(TAG, "║  Spotify is installed but auth returned empty immediately.   ║")
+                        Log.e(TAG, "║  The auth dialog flashed and dismissed without going to      ║")
+                        Log.e(TAG, "║  Spotify. Common client-side causes:                         ║")
+                        Log.e(TAG, "║                                                              ║")
+                        Log.e(TAG, "║  1. MainActivity launchMode is singleTask (most likely).     ║")
+                        Log.e(TAG, "║     Change to singleTop in your AndroidManifest.xml.         ║")
+                        Log.e(TAG, "║                                                              ║")
+                        Log.e(TAG, "║  2. Redirect URI '${redirectURL.take(30)}...' not registered  ║")
+                        Log.e(TAG, "║     in Spotify Developer Dashboard.                          ║")
+                        Log.e(TAG, "║                                                              ║")
+                        Log.e(TAG, "║  3. manifestPlaceholders redirectHostName in build.gradle    ║")
+                        Log.e(TAG, "║     does not match the host portion of your redirect URI.    ║")
+                        Log.e(TAG, "║     (Run the Expo config plugin to regenerate.)              ║")
+                        Log.e(TAG, "║                                                              ║")
+                        Log.e(TAG, "║  4. Installed Spotify version is too old to support          ║")
+                        Log.e(TAG, "║     app-switch auth.                                         ║")
+                        Log.e(TAG, "╚══════════════════════════════════════════════════════════════╝")
+                        Log.e(TAG, "")
+                    } else {
+                        Log.w(TAG, "Authorization returned EMPTY - user likely cancelled")
+                    }
                     module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
                 }
                 else -> {

@@ -5,6 +5,16 @@ import { SpotifyConfig } from './types.js'
 
 const pkg = require('../../package.json');
 
+/**
+ * Splits a callback value (e.g. "auth" or "auth/spotify") into its host and optional path components.
+ * Android intent filter `android:host` must not include a path segment.
+ */
+function parseCallback(callback: string): { host: string; path: string | null } {
+  const slashIdx = callback.indexOf('/')
+  if (slashIdx === -1) return { host: callback, path: null }
+  return { host: callback.slice(0, slashIdx), path: callback.slice(slashIdx) }
+}
+
 function validateSpotifyConfig(config: SpotifyConfig) {
   if (!config.clientID) throw new Error("Spotify clientID is required")
   if (!config.scheme) throw new Error("URL scheme is required")
@@ -86,9 +96,12 @@ const withSpotifyManifestPlaceholders: ConfigPlugin<SpotifyConfig> = (config, pr
 
     // Escape values for Gradle string literals (escape backslashes and quotes)
     const scheme = String(props.scheme).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const host = String(props.callback).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    // ".*" accepts any path - retains previous behavior per Spotify changelog (auth lib 3.0.0)
-    const pathPattern = '.*';
+    // Split callback into host and optional path — android:host must not contain a slash
+    const { host: callbackHost, path: callbackPath } = parseCallback(props.callback)
+    const host = String(callbackHost).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    // If the callback has a path component (e.g. "auth/spotify"), prefix the pathPattern
+    // so SpotifyAuthorizationActivity's intent filter correctly matches the return URI.
+    const pathPattern = callbackPath ? `${callbackPath}.*` : '.*';
 
     const placeholdersBlock = `        manifestPlaceholders = [
             redirectSchemeName: "${scheme}",
@@ -131,6 +144,8 @@ const withSpotifyAndroidManifest: ConfigPlugin<SpotifyConfig> = (config, props) 
 
     // Construct the redirect URL from scheme and callback
     const redirectUrl = `${props.scheme}://${props.callback}`;
+    // Split callback into host and optional path for correct intent filter construction
+    const { host: callbackHost, path: callbackPath } = parseCallback(props.callback)
 
     // Add Spotify configuration as meta-data elements
     const metaDataEntries = [
@@ -170,25 +185,28 @@ const withSpotifyAndroidManifest: ConfigPlugin<SpotifyConfig> = (config, props) 
     const hasSpotifyIntentFilter = mainActivity['intent-filter'].some(
       (filter: any) =>
         filter.data?.some(
-          (d: any) => d.$?.['android:scheme'] === props.scheme && d.$?.['android:host'] === props.callback
+          (d: any) => d.$?.['android:scheme'] === props.scheme && d.$?.['android:host'] === callbackHost
         )
     );
 
     if (!hasSpotifyIntentFilter) {
+      // Build the data element: android:host must be the hostname only (no path).
+      // If the callback has a path component (e.g. "auth/spotify"), add android:pathPrefix.
+      const dataAttrs: Record<string, string> = {
+        'android:scheme': props.scheme,
+        'android:host': callbackHost,
+      }
+      if (callbackPath) {
+        dataAttrs['android:pathPrefix'] = callbackPath
+      }
+
       mainActivity['intent-filter'].push({
         action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
         category: [
           { $: { 'android:name': 'android.intent.category.DEFAULT' } },
           { $: { 'android:name': 'android.intent.category.BROWSABLE' } },
         ],
-        data: [
-          {
-            $: {
-              'android:scheme': props.scheme,
-              'android:host': props.callback,
-            },
-          },
-        ],
+        data: [{ $: dataAttrs }],
       });
     }
 
