@@ -62,6 +62,11 @@ class SpotifyAuthModule : Module() {
             spotifyAuth.cancelWebAuth()
         }
 
+        OnNewIntent { intent ->
+            secureLog("OnNewIntent received in module - action=${intent.action}, data=${intent.data}")
+            spotifyAuth.handleNewIntent(intent)
+        }
+
         OnActivityResult { _, payload ->
             secureLog("OnActivityResult received in module - requestCode=${payload.requestCode}, resultCode=${payload.resultCode}")
             android.util.Log.d("SpotifyAuth", "=== MODULE ACTIVITY RESULT ===")
