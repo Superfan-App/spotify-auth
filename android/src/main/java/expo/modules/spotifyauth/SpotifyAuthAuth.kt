@@ -436,6 +436,27 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
     fun handleNewIntent(intent: Intent) {
         Log.d(TAG, "handleNewIntent called - action=${intent.action}, data=${intent.data}")
 
+        // Guard: only process intents whose data URI matches our Spotify redirect URI
+        // (scheme + host). Any other onNewIntent (push notification tap, other deep links,
+        // navigation events) arriving while isAuthenticating=true would otherwise be
+        // processed by AuthorizationClient.getResponse(), which returns EMPTY for
+        // non-Spotify intents. That EMPTY result fires a UserCancelled error and resets
+        // isAuthenticating=false, so the real Spotify callback is silently dropped when
+        // it eventually arrives.
+        val intentData = intent.data
+        if (intentData != null) {
+            try {
+                val configuredUri = Uri.parse(redirectURL)
+                if (intentData.scheme != configuredUri.scheme || intentData.host != configuredUri.host) {
+                    Log.d(TAG, "Ignoring new intent - data URI doesn't match redirect URI (got scheme=${intentData.scheme}, host=${intentData.host})")
+                    return
+                }
+            } catch (e: SpotifyAuthException.MissingConfiguration) {
+                Log.w(TAG, "Cannot verify redirect URI in handleNewIntent: ${e.message}")
+                // Proceed and let getResponse() decide
+            }
+        }
+
         if (!isAuthenticating) {
             Log.d(TAG, "Ignoring new intent - not currently authenticating")
             return
