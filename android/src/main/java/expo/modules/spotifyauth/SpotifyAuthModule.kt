@@ -67,21 +67,6 @@ class SpotifyAuthModule : Module() {
             spotifyAuth.handleNewIntent(intent)
         }
 
-        OnActivityResult { _, payload ->
-            secureLog("OnActivityResult received in module - requestCode=${payload.requestCode}, resultCode=${payload.resultCode}")
-            android.util.Log.d("SpotifyAuth", "=== MODULE ACTIVITY RESULT ===")
-            android.util.Log.d("SpotifyAuth", "Request code: ${payload.requestCode}")
-            android.util.Log.d("SpotifyAuth", "Result code: ${payload.resultCode}")
-            android.util.Log.d("SpotifyAuth", "Has data: ${payload.data != null}")
-            if (payload.data != null) {
-                android.util.Log.d("SpotifyAuth", "Data scheme: ${payload.data?.scheme}")
-                android.util.Log.d("SpotifyAuth", "Data host: ${payload.data?.data?.host}")
-                android.util.Log.d("SpotifyAuth", "Data path: ${payload.data?.data?.path}")
-            }
-            android.util.Log.d("SpotifyAuth", "============================")
-            spotifyAuth.handleActivityResult(payload.requestCode, payload.resultCode, payload.data)
-        }
-
         OnDestroy {
             spotifyAuth.cleanup()
         }

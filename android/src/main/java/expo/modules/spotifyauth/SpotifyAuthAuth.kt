@@ -1,6 +1,5 @@
 package expo.modules.spotifyauth
 
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -9,9 +8,6 @@ import android.os.Looper
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.spotify.sdk.android.auth.AuthorizationClient
-import com.spotify.sdk.android.auth.AuthorizationRequest
-import com.spotify.sdk.android.auth.AuthorizationResponse
 import expo.modules.kotlin.AppContext
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -22,11 +18,17 @@ import java.net.URL
 import java.util.concurrent.Executors
 
 /**
- * Core Spotify authentication logic for Android, mirroring the iOS SpotifyAuthAuth class.
+ * Core Spotify authentication logic for Android.
  *
- * Uses browser-based auth via Spotify's AuthorizationClient.openLoginInBrowser().
- * On Android, app-switch is disabled regardless of whether the Spotify app is installed.
- * Auth results are delivered via onNewIntent (handled by handleNewIntent()).
+ * Opens the Spotify OAuth URL directly in the system browser via Intent.ACTION_VIEW.
+ * This avoids using SpotifyAuthorizationActivity (openLoginInBrowser), which conflicts
+ * with MainActivity's singleTask launchMode on physical devices: the singleTask mode
+ * causes the redirect intent to be routed to MainActivity before SpotifyAuthorizationActivity
+ * can call setResult(), resulting in a RESULT_CANCELED that drops the real auth code.
+ *
+ * By opening the browser directly, the redirect arrives cleanly via onNewIntent on
+ * MainActivity, which is handled by handleNewIntent(). This is the same path that
+ * works on the emulator.
  *
  * Token exchange and refresh are handled via the backend token swap/refresh URLs,
  * matching the iOS implementation.
@@ -35,7 +37,6 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
 
     companion object {
         private const val TAG = "SpotifyAuth"
-        private const val REQUEST_CODE = 1337
         private const val ENCRYPTED_PREFS_FILE = "expo_spotify_auth_prefs"
         private const val PREF_REFRESH_TOKEN_KEY = "refresh_token"
 
@@ -194,8 +195,17 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
 
     /**
      * Initiate the Spotify authorization flow via the system browser.
-     * On Android, app-switch is always bypassed. The auth result is delivered
-     * via onNewIntent, handled by handleNewIntent().
+     *
+     * Opens the Spotify OAuth URL directly with Intent.ACTION_VIEW instead of using
+     * AuthorizationClient.openLoginInBrowser(), which internally starts
+     * SpotifyAuthorizationActivity via startActivityForResult. That approach breaks
+     * on physical devices when MainActivity has launchMode="singleTask": the redirect
+     * intent is routed to MainActivity (clearing SpotifyAuthorizationActivity from the
+     * stack before setResult is called), so onActivityResult gets RESULT_CANCELED and
+     * the real auth code arrives via onNewIntent after isAuthenticating has been reset.
+     *
+     * Opening the browser directly skips SpotifyAuthorizationActivity entirely.
+     * The auth result is always delivered via onNewIntent → handleNewIntent().
      */
     fun initAuth(config: AuthorizeConfig) {
         secureLog("initAuth called with showDialog=${config.showDialog}")
@@ -222,11 +232,11 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
 
             val clientId = clientID
             val redirectUri = redirectURL
-            val scopeArray = scopes.toTypedArray()
+            val scopeList = scopes
 
-            secureLog("Configuration - ClientID: ${clientId.take(8)}..., RedirectURI: $redirectUri, Scopes: ${scopeArray.size}")
+            secureLog("Configuration - ClientID: ${clientId.take(8)}..., RedirectURI: $redirectUri, Scopes: ${scopeList.size}")
 
-            if (scopeArray.isEmpty()) {
+            if (scopeList.isEmpty()) {
                 Log.e(TAG, "No valid scopes found in configuration")
                 throw SpotifyAuthException.InvalidConfiguration("No valid scopes found in configuration")
             }
@@ -239,32 +249,23 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
             isAuthenticating = true
             secureLog("Setting isAuthenticating to true")
 
-            val builder = AuthorizationRequest.Builder(
-                clientId,
-                AuthorizationResponse.Type.CODE,
-                redirectUri
-            )
-            builder.setScopes(scopeArray)
+            // Build the standard Spotify OAuth authorization URL.
+            val authUri = Uri.Builder()
+                .scheme("https")
+                .authority("accounts.spotify.com")
+                .path("/authorize")
+                .appendQueryParameter("client_id", clientId)
+                .appendQueryParameter("response_type", "code")
+                .appendQueryParameter("redirect_uri", redirectUri)
+                .appendQueryParameter("scope", scopeList.joinToString(" "))
+                .apply { if (config.showDialog) appendQueryParameter("show_dialog", "true") }
+                .build()
 
-            if (config.showDialog) {
-                builder.setShowDialog(true)
-                secureLog("Force-showing login dialog")
-            }
-
-            // Note: The Android Spotify auth-lib doesn't support a 'campaign' parameter
-            // on authorization requests (unlike iOS). The campaign param is ignored on Android.
-
-            val request = builder.build()
-
-            secureLog("Opening Spotify authorization in browser")
-
-            // === SPOTIFY AUTH DEBUG ===
             Log.d(TAG, "=== SPOTIFY AUTH DEBUG ===")
-            Log.d(TAG, "Auth flow type: BROWSER (app-switch disabled on Android)")
+            Log.d(TAG, "Auth flow: direct browser (Intent.ACTION_VIEW)")
             Log.d(TAG, "Client ID: ${clientId.take(10)}...")
             Log.d(TAG, "Redirect URI: $redirectUri")
-            Log.d(TAG, "Response Type: CODE")
-            Log.d(TAG, "Scopes: ${scopeArray.joinToString(",")}")
+            Log.d(TAG, "Scopes: ${scopeList.joinToString(",")}")
             Log.d(TAG, "Package name: ${appContext.reactContext?.packageName}")
             Log.d(TAG, "Activity: ${activity.javaClass.name}")
             Log.d(TAG, "========================")
@@ -282,13 +283,11 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
             mainHandler.postDelayed(authTimeoutHandler!!, AUTH_TIMEOUT_MS)
 
             try {
-                // Use browser-based auth on Android (bypasses Spotify app-switch).
-                // The auth result is delivered via onNewIntent, handled by handleNewIntent().
-                AuthorizationClient.openLoginInBrowser(activity, request)
-                secureLog("AuthorizationClient.openLoginInBrowser called successfully")
+                activity.startActivity(Intent(Intent.ACTION_VIEW, authUri))
+                secureLog("Browser opened for Spotify auth")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to open browser authorization: ${e.message}", e)
-                throw SpotifyAuthException.AuthenticationFailed("Failed to open Spotify authorization: ${e.message}")
+                Log.e(TAG, "Failed to open browser: ${e.message}", e)
+                throw SpotifyAuthException.AuthenticationFailed("Failed to open browser: ${e.message}")
             }
 
         } catch (e: SpotifyAuthException) {
@@ -306,154 +305,29 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
     }
 
     /**
-     * Handle the result from Spotify's AuthorizationClient activity.
-     * Called by the module's OnActivityResult handler.
-     */
-    fun handleActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        Log.d(TAG, "handleActivityResult called - requestCode=$requestCode, resultCode=$resultCode, hasData=${data != null}")
-
-        // === ENHANCED DEBUG LOGGING FOR ACTIVITY RESULT ===
-        if (data != null) {
-            Log.d(TAG, "Intent data URI: ${data.data}")
-            Log.d(TAG, "Intent action: ${data.action}")
-            Log.d(TAG, "Intent extras keys: ${data.extras?.keySet()?.joinToString() ?: "none"}")
-            data.extras?.let { extras ->
-                for (key in extras.keySet()) {
-                    val value = extras.get(key)
-                    if (key.contains("token", ignoreCase = true) ||
-                        key.contains("code", ignoreCase = true) ||
-                        key.contains("secret", ignoreCase = true)) {
-                        Log.d(TAG, "  $key: [REDACTED]")
-                    } else {
-                        Log.d(TAG, "  $key: $value")
-                    }
-                }
-            }
-        } else {
-            Log.w(TAG, "Intent data is NULL - callback may not have fired correctly")
-            Log.w(TAG, "This often indicates an intent filter configuration issue")
-        }
-
-        if (requestCode != REQUEST_CODE) {
-            Log.d(TAG, "Ignoring activity result - wrong request code (expected $REQUEST_CODE, got $requestCode)")
-            return
-        }
-
-        // Cancel the timeout
-        authTimeoutHandler?.let {
-            mainHandler.removeCallbacks(it)
-            secureLog("Auth timeout cancelled")
-        }
-
-        if (!isAuthenticating) {
-            Log.w(TAG, "Received activity result but isAuthenticating was false")
-        }
-
-        isAuthenticating = false
-        secureLog("Setting isAuthenticating to false")
-
-        if (module == null) {
-            Log.e(TAG, "CRITICAL: Module is null in handleActivityResult - cannot send events to JS")
-            return
-        }
-
-        try {
-            val response = AuthorizationClient.getResponse(resultCode, data)
-            Log.d(TAG, "Spotify response type: ${response.type}")
-
-            when (response.type) {
-                AuthorizationResponse.Type.CODE -> {
-                    val code = response.code
-                    secureLog("Authorization code received, length=${code?.length ?: 0}")
-                    if (code != null) {
-                        exchangeCodeForToken(code)
-                    } else {
-                        Log.e(TAG, "Authorization code was null despite CODE response type")
-                        module?.onAuthorizationError(
-                            SpotifyAuthException.AuthenticationFailed("No authorization code received")
-                        )
-                    }
-                }
-                AuthorizationResponse.Type.ERROR -> {
-                    val errorMsg = response.error ?: "Unknown error"
-                    Log.e(TAG, "Spotify authorization error: $errorMsg")
-                    if (errorMsg.contains("access_denied", ignoreCase = true) ||
-                        errorMsg.contains("cancelled", ignoreCase = true)) {
-                        module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
-                    } else {
-                        module?.onAuthorizationError(SpotifyAuthException.AuthorizationError(errorMsg))
-                    }
-                }
-                AuthorizationResponse.Type.EMPTY -> {
-                    val spotifyInstalled = isSpotifyInstalled()
-                    if (spotifyInstalled) {
-                        Log.e(TAG, "")
-                        Log.e(TAG, "╔══════════════════════════════════════════════════════════════╗")
-                        Log.e(TAG, "║  SPOTIFY APP-SWITCH AUTH: EMPTY RESPONSE                     ║")
-                        Log.e(TAG, "╠══════════════════════════════════════════════════════════════╣")
-                        Log.e(TAG, "║  Spotify is installed but auth returned empty immediately.   ║")
-                        Log.e(TAG, "║  The auth dialog flashed and dismissed without going to      ║")
-                        Log.e(TAG, "║  Spotify. Common client-side causes:                         ║")
-                        Log.e(TAG, "║                                                              ║")
-                        Log.e(TAG, "║  1. MainActivity launchMode is singleTask (most likely).     ║")
-                        Log.e(TAG, "║     Change to singleTop in your AndroidManifest.xml.         ║")
-                        Log.e(TAG, "║                                                              ║")
-                        Log.e(TAG, "║  2. Redirect URI '${redirectURL.take(30)}...' not registered  ║")
-                        Log.e(TAG, "║     in Spotify Developer Dashboard.                          ║")
-                        Log.e(TAG, "║                                                              ║")
-                        Log.e(TAG, "║  3. manifestPlaceholders redirectHostName in build.gradle    ║")
-                        Log.e(TAG, "║     does not match the host portion of your redirect URI.    ║")
-                        Log.e(TAG, "║     (Run the Expo config plugin to regenerate.)              ║")
-                        Log.e(TAG, "║                                                              ║")
-                        Log.e(TAG, "║  4. Installed Spotify version is too old to support          ║")
-                        Log.e(TAG, "║     app-switch auth.                                         ║")
-                        Log.e(TAG, "╚══════════════════════════════════════════════════════════════╝")
-                        Log.e(TAG, "")
-                    } else {
-                        Log.w(TAG, "Authorization returned EMPTY - user likely cancelled")
-                    }
-                    module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
-                }
-                else -> {
-                    Log.e(TAG, "Unexpected Spotify response type: ${response.type}")
-                    module?.onAuthorizationError(
-                        SpotifyAuthException.AuthenticationFailed("Unexpected response type: ${response.type}")
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception in handleActivityResult: ${e.message}", e)
-            module?.onAuthorizationError(
-                SpotifyAuthException.AuthenticationFailed("Error processing auth result: ${e.message}")
-            )
-        }
-    }
-
-    /**
-     * Handle the Spotify auth callback delivered via onNewIntent (browser-based flow).
-     * Called by the module's OnNewIntent handler after openLoginInBrowser() completes.
+     * Handle the Spotify auth callback delivered via onNewIntent.
+     *
+     * When the browser redirects to superfan://callback?code=XXX, Android routes the
+     * intent to MainActivity (via the intent filter in AndroidManifest), which calls
+     * onNewIntent. This method parses the redirect URI directly to extract the auth code.
      */
     fun handleNewIntent(intent: Intent) {
         Log.d(TAG, "handleNewIntent called - action=${intent.action}, data=${intent.data}")
 
-        // Guard: only process intents whose data URI matches our Spotify redirect URI
-        // (scheme + host). Any other onNewIntent (push notification tap, other deep links,
-        // navigation events) arriving while isAuthenticating=true would otherwise be
-        // processed by AuthorizationClient.getResponse(), which returns EMPTY for
-        // non-Spotify intents. That EMPTY result fires a UserCancelled error and resets
-        // isAuthenticating=false, so the real Spotify callback is silently dropped when
-        // it eventually arrives.
+        // Only process intents whose data URI matches our Spotify redirect URI (scheme + host).
+        // This guards against push notifications, other deep links, or navigation events
+        // arriving while isAuthenticating=true accidentally cancelling the auth flow.
         val intentData = intent.data
         if (intentData != null) {
             try {
                 val configuredUri = Uri.parse(redirectURL)
                 if (intentData.scheme != configuredUri.scheme || intentData.host != configuredUri.host) {
-                    Log.d(TAG, "Ignoring new intent - data URI doesn't match redirect URI (got scheme=${intentData.scheme}, host=${intentData.host})")
+                    Log.d(TAG, "Ignoring new intent - URI doesn't match redirect (got scheme=${intentData.scheme}, host=${intentData.host})")
                     return
                 }
             } catch (e: SpotifyAuthException.MissingConfiguration) {
                 Log.w(TAG, "Cannot verify redirect URI in handleNewIntent: ${e.message}")
-                // Proceed and let getResponse() decide
+                // Proceed anyway
             }
         }
 
@@ -476,49 +350,33 @@ class SpotifyAuthAuth private constructor(private val appContext: AppContext) {
             return
         }
 
-        try {
-            val response = AuthorizationClient.getResponse(Activity.RESULT_OK, intent)
-            Log.d(TAG, "Spotify response type: ${response.type}")
+        val data = intent.data
+        if (data == null) {
+            Log.e(TAG, "Redirect intent has no data URI")
+            module?.onAuthorizationError(SpotifyAuthException.AuthenticationFailed("No redirect data received"))
+            return
+        }
 
-            when (response.type) {
-                AuthorizationResponse.Type.CODE -> {
-                    val code = response.code
-                    secureLog("Authorization code received, length=${code?.length ?: 0}")
-                    if (code != null) {
-                        exchangeCodeForToken(code)
-                    } else {
-                        Log.e(TAG, "Authorization code was null despite CODE response type")
-                        module?.onAuthorizationError(
-                            SpotifyAuthException.AuthenticationFailed("No authorization code received")
-                        )
-                    }
-                }
-                AuthorizationResponse.Type.ERROR -> {
-                    val errorMsg = response.error ?: "Unknown error"
-                    Log.e(TAG, "Spotify authorization error: $errorMsg")
-                    if (errorMsg.contains("access_denied", ignoreCase = true) ||
-                        errorMsg.contains("cancelled", ignoreCase = true)) {
-                        module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
-                    } else {
-                        module?.onAuthorizationError(SpotifyAuthException.AuthorizationError(errorMsg))
-                    }
-                }
-                AuthorizationResponse.Type.EMPTY -> {
-                    Log.w(TAG, "Browser auth returned EMPTY - user likely cancelled")
+        val code = data.getQueryParameter("code")
+        val error = data.getQueryParameter("error")
+
+        when {
+            code != null -> {
+                secureLog("Authorization code received")
+                exchangeCodeForToken(code)
+            }
+            error != null -> {
+                Log.e(TAG, "Spotify authorization error in redirect: $error")
+                if (error == "access_denied") {
                     module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
-                }
-                else -> {
-                    Log.e(TAG, "Unexpected Spotify response type: ${response.type}")
-                    module?.onAuthorizationError(
-                        SpotifyAuthException.AuthenticationFailed("Unexpected response type: ${response.type}")
-                    )
+                } else {
+                    module?.onAuthorizationError(SpotifyAuthException.AuthorizationError(error))
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception in handleNewIntent: ${e.message}", e)
-            module?.onAuthorizationError(
-                SpotifyAuthException.AuthenticationFailed("Error processing auth result: ${e.message}")
-            )
+            else -> {
+                Log.w(TAG, "Redirect URI has no code or error parameter - user likely cancelled")
+                module?.onAuthorizationError(SpotifyAuthException.UserCancelled())
+            }
         }
     }
 

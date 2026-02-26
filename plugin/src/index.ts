@@ -1,6 +1,6 @@
 // plugin/src/index.ts
 
-import { type ConfigPlugin, createRunOncePlugin, withInfoPlist, withAndroidManifest, withAppBuildGradle, AndroidConfig } from '@expo/config-plugins'
+import { type ConfigPlugin, createRunOncePlugin, withInfoPlist, withAndroidManifest, AndroidConfig } from '@expo/config-plugins'
 import { SpotifyConfig } from './types.js'
 
 const pkg = require('../../package.json');
@@ -84,59 +84,6 @@ const withSpotifyConfiguration: ConfigPlugin<SpotifyConfig> = (config, props) =>
 };
 
 // region Android config plugins
-
-/**
- * Injects manifestPlaceholders into the app's build.gradle.
- * Spotify auth lib 3.0.0+ requires redirectSchemeName, redirectHostName, and redirectPathPattern.
- * See: https://github.com/spotify/android-auth
- */
-const withSpotifyManifestPlaceholders: ConfigPlugin<SpotifyConfig> = (config, props) => {
-  return withAppBuildGradle(config, (config) => {
-    let buildGradle = config.modResults.contents;
-
-    // Escape values for Gradle string literals (escape backslashes and quotes)
-    const scheme = String(props.scheme).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    // Split callback into host and optional path — android:host must not contain a slash
-    const { host: callbackHost, path: callbackPath } = parseCallback(props.callback)
-    const host = String(callbackHost).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    // If the callback has a path component (e.g. "auth/spotify"), prefix the pathPattern
-    // so SpotifyAuthorizationActivity's intent filter correctly matches the return URI.
-    const pathPattern = callbackPath ? `${callbackPath}.*` : '.*';
-
-    const placeholdersBlock = `        manifestPlaceholders = [
-            redirectSchemeName: "${scheme}",
-            redirectHostName: "${host}",
-            redirectPathPattern: "${pathPattern}"
-        ]`;
-
-    // Already has all three placeholders (auth lib 3.0.0+ compliant)
-    if (buildGradle.includes('redirectPathPattern')) {
-      return config;
-    }
-
-    // Upgrade: have scheme/host but missing redirectPathPattern (auth lib 3.0.0 breaking change)
-    if (buildGradle.includes('redirectSchemeName') && buildGradle.includes('redirectHostName')) {
-      buildGradle = buildGradle.replace(
-        /(redirectHostName:\s*"[^"]*")(\s*\n\s*\])/,
-        `$1,\n            redirectPathPattern: "${pathPattern}"$2`
-      );
-      config.modResults.contents = buildGradle;
-      return config;
-    }
-
-    // Add manifestPlaceholders to defaultConfig block.
-    const defaultConfigRegex = /(defaultConfig\s*\{)/;
-    if (defaultConfigRegex.test(buildGradle)) {
-      buildGradle = buildGradle.replace(
-        defaultConfigRegex,
-        `$1\n${placeholdersBlock}`
-      );
-    }
-
-    config.modResults.contents = buildGradle;
-    return config;
-  });
-};
 
 const withSpotifyAndroidManifest: ConfigPlugin<SpotifyConfig> = (config, props) => {
   return withAndroidManifest(config, (config) => {
@@ -231,7 +178,6 @@ const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
   config = withSpotifyURLSchemes(config, props);
 
   // Apply Android configurations
-  config = withSpotifyManifestPlaceholders(config, props);
   config = withSpotifyAndroidManifest(config, props);
 
   return config;
