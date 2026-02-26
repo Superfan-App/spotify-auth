@@ -128,12 +128,18 @@ const withSpotifyAndroidManifest: ConfigPlugin<SpotifyConfig> = (config, props) 
       mainActivity['intent-filter'] = [];
     }
 
-    // Check if we already have a Spotify redirect intent filter
+    // Check if we already have an intent filter covering the Spotify redirect.
+    // A broad scheme-only filter (no android:host) already covers superfan://callback,
+    // so we must treat it as sufficient to avoid registering two overlapping filters
+    // (which causes Android to show the app twice in the disambiguation dialog).
     const hasSpotifyIntentFilter = mainActivity['intent-filter'].some(
       (filter: any) =>
-        filter.data?.some(
-          (d: any) => d.$?.['android:scheme'] === props.scheme && d.$?.['android:host'] === callbackHost
-        )
+        filter.data?.some((d: any) => {
+          const scheme = d.$?.['android:scheme'];
+          const host = d.$?.['android:host'];
+          // Matches if same scheme + matching host, OR same scheme with no host restriction
+          return scheme === props.scheme && (!host || host === callbackHost);
+        })
     );
 
     if (!hasSpotifyIntentFilter) {
