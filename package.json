@@ -1,6 +1,6 @@
 {
   "name": "@superfan-app/spotify-auth",
-  "version": "0.1.77",
+  "version": "0.1.78",
   "description": "Spotify OAuth module for Expo",
   "main": "src/index.tsx",
   "types": "build/index.d.ts",

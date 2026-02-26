@@ -1,6 +1,6 @@
 // plugin/src/index.ts
 
-import { type ConfigPlugin, createRunOncePlugin, withInfoPlist, withAndroidManifest, AndroidConfig } from '@expo/config-plugins'
+import { type ConfigPlugin, createRunOncePlugin, withInfoPlist, withAndroidManifest, withAppBuildGradle, AndroidConfig } from '@expo/config-plugins'
 import { SpotifyConfig } from './types.js'
 
 const pkg = require('../../package.json');
@@ -161,6 +161,35 @@ const withSpotifyAndroidManifest: ConfigPlugin<SpotifyConfig> = (config, props) 
   });
 };
 
+const withSpotifyManifestPlaceholders: ConfigPlugin<SpotifyConfig> = (config, props) => {
+  return withAppBuildGradle(config, (config) => {
+    const { host: callbackHost, path: callbackPath } = parseCallback(props.callback)
+    const pathPattern = callbackPath ? callbackPath.replace(/\//g, '\\/') + '.*' : '.*'
+
+    const placeholderBlock = `manifestPlaceholders = [
+            redirectSchemeName: "${props.scheme}",
+            redirectHostName: "${callbackHost}",
+            redirectPathPattern: "${pathPattern}"
+        ]`
+
+    if (config.modResults.contents.includes('manifestPlaceholders')) {
+      // Replace existing block
+      config.modResults.contents = config.modResults.contents.replace(
+        /manifestPlaceholders\s*=\s*\[[\s\S]*?\]/,
+        placeholderBlock
+      )
+    } else {
+      // Inject into defaultConfig
+      config.modResults.contents = config.modResults.contents.replace(
+        /defaultConfig\s*\{/,
+        `defaultConfig {\n        ${placeholderBlock}`
+      )
+    }
+
+    return config
+  })
+}
+
 // endregion
 
 const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
@@ -179,6 +208,7 @@ const withSpotifyAuth: ConfigPlugin<SpotifyConfig> = (config, props) => {
 
   // Apply Android configurations
   config = withSpotifyAndroidManifest(config, props);
+  config = withSpotifyManifestPlaceholders(config, props);
 
   return config;
 };
