@@ -562,11 +562,13 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     return "Server returned status code \(statusCode)"
   }
   
-  /// Parse the `expires_in` field from a token response JSON, accepting both Int and Double.
+  /// Parse the `expires_in` field from a token response JSON, accepting Int, Double, or String.
   private static func parseExpiresIn(from json: [String: Any]) throws -> TimeInterval {
     if let expiresInInt = json["expires_in"] as? Int {
       return TimeInterval(expiresInInt)
     } else if let expiresInDouble = json["expires_in"] as? Double {
+      return expiresInDouble
+    } else if let expiresInString = json["expires_in"] as? String, let expiresInDouble = Double(expiresInString) {
       return expiresInDouble
     }
     throw SpotifyAuthError.tokenError("Invalid or missing expires_in in response")
