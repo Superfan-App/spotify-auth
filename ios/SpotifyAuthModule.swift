@@ -79,7 +79,9 @@ public class SpotifyAuthModule: Module {
 
         // Update the dismissal function
         AsyncFunction("dismissAuthSession") {
-            self.spotifyAuth.cancelWebAuth()
+            DispatchQueue.main.async {
+                self.spotifyAuth.cancelWebAuth()
+            }
         }
     }
 
