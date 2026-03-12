@@ -492,26 +492,40 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     // URLComponents.percentEncodedQuery properly encodes the values
     request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
     
+    print("[SpotifyDebug] exchangeCodeForToken: sending request to \(url)")
     let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        print("[SpotifyDebug] exchangeCodeForToken: dataTask callback fired, self=\(self != nil), error=\(String(describing: error))")
+        if let http = response as? HTTPURLResponse {
+            print("[SpotifyDebug] exchangeCodeForToken: HTTP status \(http.statusCode)")
+        }
+        if let data = data, let body = String(data: data, encoding: .utf8) {
+            print("[SpotifyDebug] exchangeCodeForToken: response body = \(body)")
+        }
         do {
             let responseData = try self?.validateHTTPResponse(data: data, response: response, error: error)
-            guard let responseData = responseData else { return }
+            guard let responseData = responseData else {
+                print("[SpotifyDebug] exchangeCodeForToken: responseData is nil (self may be nil)")
+                return
+            }
             let parsed = try Self.parseTokenJSON(from: responseData)
-            
+            print("[SpotifyDebug] exchangeCodeForToken: parsed token OK, hasRefreshToken=\(parsed.refreshToken != nil)")
+
             guard let refreshToken = parsed.refreshToken else {
                 throw SpotifyAuthError.tokenError("Missing refresh_token in response")
             }
-            
+
             let expirationDate = Date(timeIntervalSinceNow: parsed.expiresIn)
             let sessionData = SpotifySessionData(accessToken: parsed.accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: parsed.scope)
             DispatchQueue.main.async {
+                print("[SpotifyDebug] exchangeCodeForToken: setting currentSession on main thread")
                 self?.currentSession = sessionData
             }
         } catch {
+            print("[SpotifyDebug] exchangeCodeForToken: caught error: \(error)")
             self?.handleError(error, context: "token_exchange")
         }
     }
-    
+
     task.resume()
   }
   
