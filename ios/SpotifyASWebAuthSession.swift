@@ -10,9 +10,7 @@ final class SpotifyASWebAuthSession {
     private var isAuthenticating = false
     
     private func secureLog(_ message: String) {
-        #if DEBUG
-        print("[SpotifyASWebAuth] \(message)")
-        #endif
+        NSLog("[SpotifyASWebAuth] \(message)")
     }
     
     func startAuthFlow(
@@ -22,12 +20,14 @@ final class SpotifyASWebAuthSession {
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
         guard !isAuthenticating else {
+            secureLog("Auth already in progress, ignoring duplicate start")
             completion(.failure(SpotifyAuthError.authorizationError("Authentication already in progress")))
             return
         }
         
         isAuthenticating = true
-        
+        secureLog("Starting auth flow for URL: \(authUrl.absoluteString)")
+
         // Create the auth session
         authSession = ASWebAuthenticationSession(
             url: authUrl,
@@ -37,17 +37,22 @@ final class SpotifyASWebAuthSession {
             
             if let error = error {
                 if (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
+                    self?.secureLog("User cancelled auth session")
                     completion(.failure(SpotifyAuthError.userCancelled))
                 } else {
+                    self?.secureLog("Auth session error: \(error.localizedDescription)")
                     completion(.failure(SpotifyAuthError.networkError(error.localizedDescription)))
                 }
                 return
             }
-            
+
             guard let callbackURL = callbackURL else {
+                self?.secureLog("Auth session returned no callback URL")
                 completion(.failure(SpotifyAuthError.authorizationError("No callback URL received")))
                 return
             }
+
+            self?.secureLog("Auth session callback received: \(callbackURL.absoluteString)")
             
             completion(.success(callbackURL))
         }
@@ -62,9 +67,10 @@ final class SpotifyASWebAuthSession {
         
         // Start the session
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, 
+            guard let self = self,
                   let authSession = self.authSession,
                   authSession.start() else {
+                self?.secureLog("Failed to start ASWebAuthenticationSession")
                 self?.isAuthenticating = false
                 completion(.failure(SpotifyAuthError.authorizationError("Failed to start auth session")))
                 return

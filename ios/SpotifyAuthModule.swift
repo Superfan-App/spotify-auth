@@ -8,15 +8,15 @@ let spotifyAuthorizationEventName = "onSpotifyAuth"
 #if DEBUG
 func secureLog(_ message: String, sensitive: Bool = false) {
     if sensitive {
-        print("[SpotifyAuth] ********")
+        NSLog("[SpotifyAuth] ********")
     } else {
-        print("[SpotifyAuth] \(message)")
+        NSLog("[SpotifyAuth] \(message)")
     }
 }
 #else
 func secureLog(_ message: String, sensitive: Bool = false) {
     if !sensitive {
-        print("[SpotifyAuth] \(message)")
+        NSLog("[SpotifyAuth] \(message)")
     }
 }
 #endif

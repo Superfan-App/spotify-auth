@@ -275,7 +275,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
           .accessibility(.afterFirstUnlock)
         try keychain.set(refreshToken, key: keychainKey)
       } catch {
-        print("Failed to store refresh token securely: \(error)")
+        NSLog("[SpotifyAuth] Failed to store refresh token securely: \(error)")
       }
     }
   }
@@ -288,7 +288,7 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
       let keychain = Keychain(service: Bundle.main.bundleIdentifier ?? "com.superfan.app")
       try keychain.remove(keychainKey)
     } catch {
-      print("Failed to clear previous refresh token: \(error)")
+      NSLog("[SpotifyAuth] Failed to clear previous refresh token: \(error)")
     }
   }
   
@@ -354,32 +354,35 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
   
   public func initAuth(config: AuthorizeConfig) {
     do {
+        secureLog("initAuth called, showDialog=\(config.showDialog), campaign=\(config.campaign ?? "nil")")
         guard let sessionManager = self.sessionManager else {
             throw SpotifyAuthError.sessionError("Session manager not initialized")
         }
-        
+
         // Get scopes from Info.plist and convert to SPTScope
         let scopes = try self.scopes
+        secureLog("Scopes from Info.plist: \(scopes.joined(separator: ", "))")
         let sptScopes = scopes.reduce(into: SPTScope()) { result, scopeString in
             if let scope = stringToScope(scopeString: scopeString) {
                 result.insert(scope)
             }
         }
-        
+
         if sptScopes.isEmpty {
             throw SpotifyAuthError.invalidConfiguration("No valid scopes found in configuration")
         }
-        
+
         isAuthenticating = true
-        
+
         if sessionManager.isSpotifyAppInstalled {
+            secureLog("Spotify app is installed, using app-switch flow")
             // Use the native app‑switch flow
             if config.showDialog {
                 sessionManager.alwaysShowAuthorizationDialog = true
             }
             sessionManager.initiateSession(with: sptScopes, options: .default, campaign: config.campaign)
         } else {
-            // Use web auth as fallback
+            secureLog("Spotify app not installed, using web auth fallback")
             // Get configuration from Info.plist before dispatching to main thread
             let clientId = try self.clientID
             let redirectUrl = try self.redirectURL
@@ -492,23 +495,23 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
     // URLComponents.percentEncodedQuery properly encodes the values
     request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
     
-    print("[SpotifyDebug] exchangeCodeForToken: sending request to \(url)")
+    NSLog("[SpotifyAuth] exchangeCodeForToken: sending request to \(url)")
     let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-        print("[SpotifyDebug] exchangeCodeForToken: dataTask callback fired, self=\(self != nil), error=\(String(describing: error))")
+        NSLog("[SpotifyAuth] exchangeCodeForToken: dataTask callback fired, self=\(self != nil), error=\(String(describing: error))")
         if let http = response as? HTTPURLResponse {
-            print("[SpotifyDebug] exchangeCodeForToken: HTTP status \(http.statusCode)")
+            NSLog("[SpotifyAuth] exchangeCodeForToken: HTTP status \(http.statusCode)")
         }
         if let data = data, let body = String(data: data, encoding: .utf8) {
-            print("[SpotifyDebug] exchangeCodeForToken: response body = \(body)")
+            NSLog("[SpotifyAuth] exchangeCodeForToken: response body = \(body)")
         }
         do {
             let responseData = try self?.validateHTTPResponse(data: data, response: response, error: error)
             guard let responseData = responseData else {
-                print("[SpotifyDebug] exchangeCodeForToken: responseData is nil (self may be nil)")
+                NSLog("[SpotifyAuth] exchangeCodeForToken: responseData is nil (self may be nil)")
                 return
             }
             let parsed = try Self.parseTokenJSON(from: responseData)
-            print("[SpotifyDebug] exchangeCodeForToken: parsed token OK, hasRefreshToken=\(parsed.refreshToken != nil)")
+            NSLog("[SpotifyAuth] exchangeCodeForToken: parsed token OK, hasRefreshToken=\(parsed.refreshToken != nil)")
 
             guard let refreshToken = parsed.refreshToken else {
                 throw SpotifyAuthError.tokenError("Missing refresh_token in response")
@@ -517,11 +520,11 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
             let expirationDate = Date(timeIntervalSinceNow: parsed.expiresIn)
             let sessionData = SpotifySessionData(accessToken: parsed.accessToken, refreshToken: refreshToken, expirationDate: expirationDate, scope: parsed.scope)
             DispatchQueue.main.async {
-                print("[SpotifyDebug] exchangeCodeForToken: setting currentSession on main thread")
+                NSLog("[SpotifyAuth] exchangeCodeForToken: setting currentSession on main thread")
                 self?.currentSession = sessionData
             }
         } catch {
-            print("[SpotifyDebug] exchangeCodeForToken: caught error: \(error)")
+            NSLog("[SpotifyAuth] exchangeCodeForToken: caught error: \(error)")
             self?.handleError(error, context: "token_exchange")
         }
     }
@@ -702,19 +705,13 @@ final class SpotifyAuthAuth: NSObject, SPTSessionManagerDelegate {
   }
   
   // MARK: - Logging
-  
+
   private func secureLog(_ message: String, sensitive: Bool = false) {
-    #if DEBUG
     if sensitive {
-      print("[SpotifyAuth] ********")
+      NSLog("[SpotifyAuth] ********")
     } else {
-      print("[SpotifyAuth] \(message)")
+      NSLog("[SpotifyAuth] \(message)")
     }
-    #else
-    if !sensitive {
-      print("[SpotifyAuth] \(message)")
-    }
-    #endif
   }
   
   deinit {
